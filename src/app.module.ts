@@ -1,0 +1,31 @@
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { DossierModule } from './dossier/dossier.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { File } from './files/entities/file.entity';
+import { FilesService } from './files/files.service';
+import { FilesModule } from './files/files.module';
+import { Company } from './files/entities/company.entity';
+import { Program } from './files/entities/program.entity';
+
+@Module({
+  imports: [
+    DossierModule,
+    FilesModule,
+  
+    TypeOrmModule.forRoot({
+      type: 'mysql',
+      host: 'mygac-dev.cpqh76cssuzm.us-east-1.rds.amazonaws.com',
+      port: 3306,
+      username: 'developer',
+      password: 'Mygacdb_2023_dev',
+      database: 'mygac_dev',
+      entities: [File, Company, Program],
+      synchronize: false,
+    }),
+  ],
+  controllers: [AppController],
+  providers: [AppService, FilesService],
+})
+export class AppModule {}

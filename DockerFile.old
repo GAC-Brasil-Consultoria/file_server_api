@@ -1,0 +1,29 @@
+# Etapa 1: Construir a imagem com as dependências
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/app
+
+CMD [ -d "node_modules" ] && npm run start:debug || npm ci && npm run start:debug
+
+COPY package*.json ./
+COPY tsconfig*.json ./
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+
+# Etapa 2: Criar a imagem final com o código de produção
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/dist ./dist
+COPY --from=builder /usr/src/app/package*.json ./
+COPY --from=builder /usr/src/app/tsconfig*.json ./
+
+# Instalar dependências de desenvolvimento
+RUN npm install --only=development
+
+CMD ["npm", "run", "dev"]
