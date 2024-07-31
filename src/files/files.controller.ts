@@ -1,24 +1,26 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
   Req,
   UploadedFile,
-  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { FilesService } from './files.service';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { S3Client } from '@aws-sdk/client-s3';
+import { UploadFileDto } from './dto/upload-file.dto';
+import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
 
 @Controller('file')
 export class FilesController {
   private s3Client: S3Client;
 
   constructor(private filesService: FilesService) {
-
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
       credentials: {
@@ -30,18 +32,16 @@ export class FilesController {
 
   @Post()
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    console.log(file.originalname);
-    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-    const result = await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: bucketName,
-        Key: `61186680000174/LDB_2021_BANCO_BMG_S.A/CONTÁBIL/Notas Fiscais/${file.originalname}`,
-        Body: file.buffer,
-      }),
+  async uploadFile(
+    @UploadedFile(new FileNotEmptyValidator()) file: Express.Multer.File,
+    @Body() uploadFileDto: UploadFileDto,
+  ) {
+    await this.filesService.uploadFile(
+      file.originalname,
+      file.buffer,
+      uploadFileDto.programId,
     );
-    console.log(result);
-    
+
     return {
       message: 'Pastas criadas com sucesso',
       data: [],
@@ -62,6 +62,13 @@ export class FilesController {
     return {
       message: 'Pastas e arquivos carregados com sucesso',
       data: await this.filesService.listAllFolders(params.id),
+    };
+  }
+  @Delete(':id')
+  async deleteFile(@Param() params: any) {
+    return {
+      message: 'Pastas e arquivos carregados com sucesso',
+      data: await this.filesService.delete(params.id),
     };
   }
 }

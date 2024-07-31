@@ -10,6 +10,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
+// import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // import { Company } from './entities/company.entity';
 export interface FolderNode {
@@ -45,19 +46,37 @@ export class FilesService {
     });
   }
 
-  public async uploadFile(
-    fileName: string,
-    file: Buffer,
-  ) {
-    const result = await this.s3Client.send(
+  public async uploadFile(fileName: string, file: Buffer, programId) {
+    const program = await this.programRepository.findOne({
+      where: {
+        id: programId,
+      },
+    });
+
+    const company = await this.companyRepository.findOne({
+      where: {
+        id: program.companyId,
+      },
+    });
+
+    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
+    const bucketName = process.env.AWS_S3_BUCKET_NAME;
+    const key = `${cnpj}/${program.name}/CONTÁBIL/Notas Fiscais/${fileName}`;
+
+    await this.s3Client.send(
       new PutObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
-        Key: `61186680000174/LDB_2021_BANCO_BMG_S.A/CONTÁBIL/Notas Fiscais/${fileName}`,
+        Bucket: bucketName,
+        Key: key,
         Body: file,
       }),
     );
-    
-    return result;
+
+    await this.filesRepository.save({
+      file_type_id: 1,
+      program_id: programId,
+      url: `${key}`,
+    });
+    return [];
   }
   async createFolder(ldb: string, folderName: string = null) {
     if (folderName === 'CONTÁBIL') {
@@ -112,13 +131,14 @@ export class FilesService {
     }
   }
   async createFolders(body: any) {
-    const company = await this.companyRepository.findOneBy({
-      id: body.companyId,
-    });
-
+    
     const program = await this.programRepository.findOneBy({
       id: body.programId,
     });
+    const company = await this.companyRepository.findOneBy({
+      id: program.companyId,
+    });
+
     const programName = program.name;
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const ldb = `${cnpj}/${programName}`;
@@ -161,9 +181,8 @@ export class FilesService {
       const subfolderNodes = await Promise.all(subfolders.map(fetchSubfolders));
       const regex = /\/([^\/]+)\/?$/;
       const match = prefix.match(regex);
-      let files = await this.listFiles(prefix);
-
-      // files = files.match(regex);
+      const files = await this.listFiles(prefix);
+      
       return {
         name: match[1],
         subfolders: subfolderNodes,
@@ -177,6 +196,7 @@ export class FilesService {
   }
 
   async listFiles(folder) {
+   
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
       Prefix: folder,
@@ -184,6 +204,7 @@ export class FilesService {
 
     try {
       const data = await this.s3.listObjectsV2(params).promise();
+      
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
         .map((key) => {
@@ -196,6 +217,42 @@ export class FilesService {
     } catch (err) {
       console.error('Erro ao listar os arquivos:', err);
       throw err;
+    }
+  }
+
+  // async checkIfObjectExists(bucket, key) {
+  //   try {
+  //     await this.s3.headObject({ Bucket: bucket, Key: key }).promise();
+  //     console.log('Object exists');
+  //     return true;
+  //   } catch (error) {
+  //     if (error.code === 'NotFound') {
+  //       return false;
+  //     }
+  //     // Handle other errors, e.g., permission issues
+  //     throw error;
+  //   }
+  // }
+  async delete(id: number) {
+    const file = await this.filesRepository.findOne({
+      where: {
+        id: id,
+      },
+    });
+    const bucketName = process.env.AWS_S3_BUCKET_NAME;
+    // const regex = /^https:\/\//i;
+
+    const params = {
+      Bucket: bucketName,
+      Key: file.url,
+    };
+
+    try {
+      await this.s3.deleteObject(params).promise();
+      console.log(`File deleted successfully from `);
+      return;
+    } catch (error) {
+      throw new Error(`Failed to delete file from S3: ${error.message}`);
     }
   }
 }
