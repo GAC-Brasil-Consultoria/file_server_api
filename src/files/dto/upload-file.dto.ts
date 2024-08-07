@@ -4,5 +4,11 @@ import { IsNotEmpty } from 'class-validator';
 export class UploadFileDto {
 
     @IsNotEmpty()
-    programId: string;
+    programId: number;
+
+    @IsNotEmpty()
+    userId: number;
+    
+    @IsNotEmpty()
+    fileTypeId: number;
 }

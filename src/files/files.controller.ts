@@ -6,12 +6,12 @@ import {
   Param,
   Post,
   Req,
-  UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { FilesService } from './files.service';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
@@ -31,20 +31,26 @@ export class FilesController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(
-    @UploadedFile(new FileNotEmptyValidator()) file: Express.Multer.File,
+  @UseInterceptors(FilesInterceptor('files')) // 'files' is the name of the field in the form
+  async uploadFiles(
+    @UploadedFiles(new FileNotEmptyValidator()) files: Express.Multer.File[],
     @Body() uploadFileDto: UploadFileDto,
   ) {
-    await this.filesService.uploadFile(
-      file.originalname,
-      file.buffer,
-      uploadFileDto.programId,
-    );
-
+    for (const file of files) {
+      await this.filesService.uploadFile(
+        file.originalname,
+        file.buffer,
+        uploadFileDto.programId,
+        uploadFileDto.userId,
+        uploadFileDto.fileTypeId,
+      );
+    } 
+    
+    // console.log(files);
+    
     return {
-      message: 'Pastas criadas com sucesso',
-      data: [],
+      message: 'Arquivos enviador com sucesso',
+      data: files,
     };
   }
   @Post('create-folders')
@@ -59,16 +65,32 @@ export class FilesController {
   }
   @Get('foldersAndFilesByProgram/:id')
   async foldersAndFilesByProgram(@Param() params: any) {
+
+
+    const data = await this.filesService.listAllFolders(params.id);
+    const resolvedData = await Promise.all(data.map(async (folder: any) => {
+      if (folder.subfolders) {
+          folder.subfolders = await Promise.all(folder.subfolders.map(async (subfolder: any) => {
+              if (subfolder.files) {
+                  subfolder.files = await Promise.all(subfolder.files.map(async (filePromise: any) => {
+                      return await filePromise;
+                  }));
+              }
+              return subfolder;
+          }));
+      }
+      return folder;
+  }));    
     return {
       message: 'Pastas e arquivos carregados com sucesso',
-      data: await this.filesService.listAllFolders(params.id),
+      data: resolvedData,
     };
   }
-  @Delete(':id')
-  async deleteFile(@Param() params: any) {
+  @Delete('') 
+  async deleteFile(@Param() params: any , @Body() body) { 
     return {
       message: 'Pastas e arquivos carregados com sucesso',
-      data: await this.filesService.delete(params.id),
+      data: await this.filesService.delete(body.ids),
     };
   }
-}
+} 

@@ -8,6 +8,8 @@ import { FilesService } from './files/files.service';
 import { FilesModule } from './files/files.module';
 import { Company } from './files/entities/company.entity';
 import { Program } from './files/entities/program.entity';
+import { FileLogo } from './files/entities/file-logo.entity';
+import { FileType } from './files/entities/file-type.entity';
 
 @Module({
   imports: [
@@ -23,7 +25,7 @@ import { Program } from './files/entities/program.entity';
       username: process.env.MYSQL_USER || 'developer',
       password: process.env.MYSQL_PASS || 'Mygacdb_2023_dev',
       database: process.env.MYSQL_DATABASE || 'mygac_dev',
-      entities: [File, Company, Program],
+      entities: [File, Company, Program, FileLogo, FileType],
       synchronize: false,
     }),
   ],

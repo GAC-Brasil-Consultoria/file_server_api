@@ -3,13 +3,9 @@ import { AppModule } from './app.module';
 import 'dotenv/config'
 import { ResponseInterceptor } from './response.interceptor';
 import { ValidationPipe } from '@nestjs/common';
-// console.log(process.env.MYSQL_HOST);
-// console.log(process.env.MYSQL_USER);
 
-
-// console.log(process.env.MYSQL_DATABASE);
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { cors: true });
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
