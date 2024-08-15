@@ -8,15 +8,9 @@ RUN npm install
 
 COPY . .
 
-# Etapa 2: Criar a imagem final com o código de produção
-FROM node:18-alpine
+RUN npm install -g ts-node-dev
+
 
 WORKDIR /app
 
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app ./
-
-# Instalar dependências de desenvolvimento
-RUN npm install --only=development
-
-CMD ["npm", "run", "start:debug"]
+CMD ["ts-node-dev", "--respawn", "--transpile-only", "src/main.ts"]

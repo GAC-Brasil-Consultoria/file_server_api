@@ -39,7 +39,7 @@ export class FilesService {
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
       region: process.env.AWS_REGION,
     });
- 
+
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
       credentials: {
@@ -146,9 +146,23 @@ export class FilesService {
       }
     }
   }
-  async createFolders(body: any) {
+
+  async createFolderByCompany(companyId: number) {
+    const company = await this.companyRepository.findOneBy({
+      id: companyId,
+    });
+
+    const programs = await this.programRepository.findBy({
+      companyId: company.id,
+    });
+    programs.forEach(async (program) => {
+      await this.createFolders(program.id);
+    });
+    return company.name;
+  }
+  async createFolders(programId: number) {
     const program = await this.programRepository.findOneBy({
-      id: body.programId,
+      id: programId,
     });
     const company = await this.companyRepository.findOneBy({
       id: program.companyId,
@@ -178,7 +192,7 @@ export class FilesService {
     // const folderPath = 'ACESSO DIGITAL TECNOLOGIA DA INFORMACAO S.A.';
     const folders = await this.getAllSubfolders(folderPath);
     // console.log(await folders.subfolders[0].subfolders[1].files);
-    
+
     return folders.subfolders;
   }
 
@@ -200,7 +214,7 @@ export class FilesService {
       const match = prefix.match(regex);
       const files = await this.listFiles(prefix);
       // console.log(files);
-      
+
       return {
         name: match[1],
         subfolders: subfolderNodes,
@@ -241,13 +255,12 @@ export class FilesService {
             // console.log(file.id);
             return {
               name: match[1],
-              id:file.id ,
+              id: file.id,
             };
           }
           // return match ? match[1] : null;
-        
         })
-        .filter(Boolean); // Remove valores nulos      
+        .filter(Boolean); // Remove valores nulos
       return files;
     } catch (err) {
       console.error('Erro ao listar os arquivos:', err);
@@ -256,28 +269,39 @@ export class FilesService {
   }
 
   async delete(ids: any) {
+    let log = [];
+    console.log(ids);
 
-    ids.forEach( async id => {
+    ids.forEach(async (id) => {
+      console.log(id);
+
       const file = await this.filesRepository.findOne({
         where: {
           id: id,
         },
       });
+      console.log(file);
+
       const bucketName = process.env.AWS_S3_BUCKET_NAME;
-  
+
       const params = {
         Bucket: bucketName,
         Key: file.url,
       };
-  
+
       try {
         await this.s3.deleteObject(params).promise();
         console.log(`File deleted successfully from `);
+
+        try {
+          await this.filesRepository.delete(file.id);
+        } catch (error) {
+          throw new Error(`Failed to delete file from S3: ${error.message}`);
+        }
         return;
       } catch (error) {
         throw new Error(`Failed to delete file from S3: ${error.message}`);
       }
     });
-   
   }
 }

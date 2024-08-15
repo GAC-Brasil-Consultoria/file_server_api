@@ -1,13 +1,20 @@
-version: '3.7'
-
 services:
-  app:
+  web:
     build: .
+    command: ts-node-dev --respawn --transpile-only src/main.ts
     volumes:
       - .:/app
-      - /app/node_modules
+      - /node_modules:/app/node_modules
     ports:
-      - "3005:3005"
-    environment:
-      - NODE_ENV=development
-    command: npm run start:debug
+      - "3000:3000"
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /src/web
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: package.json
+
+          

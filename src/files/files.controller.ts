@@ -5,16 +5,16 @@ import {
   Get,
   Param,
   Post,
-  Req,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { FilesService } from './files.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
+import { ApiConsumes, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { CreateFolderDto } from './dto/create-folder-dto';
 
 @Controller('file')
 export class FilesController {
@@ -31,7 +31,35 @@ export class FilesController {
   }
 
   @Post()
-  @UseInterceptors(FilesInterceptor('files')) // 'files' is the name of the field in the form
+  @UseInterceptors(FilesInterceptor('files'))
+  @ApiOperation({ summary: 'Faz upload de múltiplos arquivos.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiResponse({
+    status: 200,
+    description: 'Arquivos enviados com sucesso.',
+    schema: {
+      example: {
+        message: 'Arquivos enviados com sucesso',
+        data: [
+          {
+            originalname: 'nome_do_arquivo.extensão',
+            buffer: '<Buffer de Dados do Arquivo>',
+          },
+        ],
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Requisição inválida ou arquivos vazios.',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Os arquivos enviados estão vazios',
+        error: 'Bad Request',
+      },
+    },
+  })
   async uploadFiles(
     @UploadedFiles(new FileNotEmptyValidator()) files: Express.Multer.File[],
     @Body() uploadFileDto: UploadFileDto,
@@ -44,53 +72,55 @@ export class FilesController {
         uploadFileDto.userId,
         uploadFileDto.fileTypeId,
       );
-    } 
-    
-    // console.log(files);
-    
+    }
+
     return {
       message: 'Arquivos enviador com sucesso',
       data: files,
     };
   }
   @Post('create-folders')
-  async createFolder(@Req() request: Request) {
-    // return request.body
-    await this.filesService.createFolders(request.body);
-
+  async createFolder(@Body() body: CreateFolderDto) {
+    const companyName = await this.filesService.createFolderByCompany(
+      body.companyId,
+    );
     return {
       message: 'Pastas criadas com sucesso',
-      data: [],
+      log:["Diretorios Criados na empresa: "+companyName]
     };
   }
   @Get('foldersAndFilesByProgram/:id')
-  async foldersAndFilesByProgram(@Param() params: any) {
-
-
+  async foldersAndFilesByProgram(@Param() params: any) { 
     const data = await this.filesService.listAllFolders(params.id);
-    const resolvedData = await Promise.all(data.map(async (folder: any) => {
-      if (folder.subfolders) {
-          folder.subfolders = await Promise.all(folder.subfolders.map(async (subfolder: any) => {
+    const resolvedData = await Promise.all(
+      data.map(async (folder: any) => {
+        if (folder.subfolders) {
+          folder.subfolders = await Promise.all(
+            folder.subfolders.map(async (subfolder: any) => {
               if (subfolder.files) {
-                  subfolder.files = await Promise.all(subfolder.files.map(async (filePromise: any) => {
-                      return await filePromise;
-                  }));
+                subfolder.files = await Promise.all(
+                  subfolder.files.map(async (filePromise: any) => {
+                    return await filePromise;
+                  }),
+                );
               }
               return subfolder;
-          }));
-      }
-      return folder;
-  }));    
+            }),
+          );
+        }
+        return folder;
+      }),
+    );
     return {
       message: 'Pastas e arquivos carregados com sucesso',
       data: resolvedData,
     };
   }
-  @Delete('') 
-  async deleteFile(@Param() params: any , @Body() body) { 
+  @Delete('')
+  async deleteFile(@Param() params: any, @Body() body) {
     return {
       message: 'Pastas e arquivos carregados com sucesso',
       data: await this.filesService.delete(body.ids),
     };
   }
-} 
+}

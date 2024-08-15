@@ -15,10 +15,11 @@ import {
     ): Observable<any> {
       return next.handle().pipe(
         map((response: any) => {
-          const { message, data } = response;
+          const { message, data , log } = response;
           return {
             status: 'success',
             message,
+            log,
             data,
           };
         }),
