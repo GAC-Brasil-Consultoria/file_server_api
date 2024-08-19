@@ -100,7 +100,7 @@ export class FilesController {
     ); 
     return {
       message: 'Pastas criadas com sucesso',
-      log:["Diretorios Criados na empresa: "+programName]
+      log:["Diretorios Criados no programa: "+programName]
     };
   }S
   @Get('foldersAndFilesByProgram/:id')
