@@ -95,7 +95,7 @@ export class FilesController {
   async createFolderByProgram(@Body() body) {
     console.log('entrou');
     
-    const programName = await this.filesService.createFolderByCompany(
+    const programName = await this.filesService.createFolderByProgram(
       body.programId,
     ); 
     return {
