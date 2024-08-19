@@ -160,6 +160,15 @@ export class FilesService {
     });
     return company.name;
   }
+
+  async createFolderByProgram(programId: number) {
+    const program = await this.programRepository.findOneBy({
+      id:programId
+    });
+    await this.createFolders(program.id);
+
+    return program.name;
+  }
   async createFolders(programId: number) {
     const program = await this.programRepository.findOneBy({
       id: programId,
@@ -213,7 +222,6 @@ export class FilesService {
       const regex = /\/([^\/]+)\/?$/;
       const match = prefix.match(regex);
       const files = await this.listFiles(prefix);
-      // console.log(files);
 
       return {
         name: match[1],
@@ -235,6 +243,8 @@ export class FilesService {
 
     try {
       const data = await this.s3.listObjectsV2(params).promise();
+      console.log(data);
+      
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
         .filter((key) => {

@@ -81,6 +81,8 @@ export class FilesController {
   }
   @Post('create-folders')
   async createFolder(@Body() body: CreateFolderDto) {
+    console.log('entrou');
+    
     const companyName = await this.filesService.createFolderByCompany(
       body.companyId,
     );
@@ -89,6 +91,18 @@ export class FilesController {
       log:["Diretorios Criados na empresa: "+companyName]
     };
   }
+  @Post('create-folders-program')
+  async createFolderByProgram(@Body() body) {
+    console.log('entrou');
+    
+    const programName = await this.filesService.createFolderByCompany(
+      body.programId,
+    ); 
+    return {
+      message: 'Pastas criadas com sucesso',
+      log:["Diretorios Criados na empresa: "+programName]
+    };
+  }S
   @Get('foldersAndFilesByProgram/:id')
   async foldersAndFilesByProgram(@Param() params: any) { 
     const data = await this.filesService.listAllFolders(params.id);
