@@ -163,7 +163,7 @@ export class FilesService {
 
   async createFolderByProgram(programId: number) {
     const program = await this.programRepository.findOneBy({
-      id:programId
+      id: programId,
     });
     await this.createFolders(program.id);
 
@@ -243,8 +243,7 @@ export class FilesService {
 
     try {
       const data = await this.s3.listObjectsV2(params).promise();
-      console.log(data);
-      
+
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
         .filter((key) => {
@@ -256,9 +255,10 @@ export class FilesService {
         })
         .map(async (key) => {
           const match = key.match(/\/([^\/]+)\/?$/);
+
           const file = await this.filesRepository.findOne({
             where: {
-              url: key,
+              url: key.split('/').map(encodeURIComponent).join('/'),
             },
           });
           if (file) {
