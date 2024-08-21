@@ -81,7 +81,6 @@ export class FilesController {
   }
   @Post('create-folders')
   async createFolder(@Body() body: CreateFolderDto) {
-    console.log('entrou');
     
     const companyName = await this.filesService.createFolderByCompany(
       body.companyId,
@@ -93,7 +92,6 @@ export class FilesController {
   }
   @Post('create-folders-program')
   async createFolderByProgram(@Body() body) {
-    console.log('entrou');
     
     const programName = await this.filesService.createFolderByProgram(
       body.programId,

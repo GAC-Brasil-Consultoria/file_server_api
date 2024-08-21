@@ -71,7 +71,7 @@ export class FilesService {
         id: file_type_id,
       },
     });
-
+    console.log(fileType.path);
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
     const key = `${cnpj}/${program.name}${fileType.path}${fileName}`;
@@ -87,7 +87,7 @@ export class FilesService {
     await this.filesRepository.save({
       file_type_id: file_type_id,
       program_id: programId,
-      url: `${key}`,
+      url: `${key.split('/').map(encodeURIComponent).join('/')}`,
       user_id: userId,
       file_logo_id: 1,
     });
@@ -198,10 +198,7 @@ export class FilesService {
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
 
     const folderPath = `${cnpj}/${program.name}`;
-    // const folderPath = 'ACESSO DIGITAL TECNOLOGIA DA INFORMACAO S.A.';
     const folders = await this.getAllSubfolders(folderPath);
-    // console.log(await folders.subfolders[0].subfolders[1].files);
-
     return folders.subfolders;
   }
 
@@ -243,6 +240,7 @@ export class FilesService {
 
     try {
       const data = await this.s3.listObjectsV2(params).promise();
+      console.log(data);
 
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
@@ -262,7 +260,6 @@ export class FilesService {
             },
           });
           if (file) {
-            // console.log(file.id);
             return {
               name: match[1],
               id: file.id,
@@ -279,39 +276,37 @@ export class FilesService {
   }
 
   async delete(ids: any) {
-    let log = [];
-    console.log(ids);
+    // let log = [];
 
-    ids.forEach(async (id) => {
-      console.log(id);
-
+    for (const id of ids) {
       const file = await this.filesRepository.findOne({
         where: {
           id: id,
         },
       });
-      console.log(file);
+
 
       const bucketName = process.env.AWS_S3_BUCKET_NAME;
+      let fileUrl = decodeURIComponent(file.url); // Decodificação
+      fileUrl = fileUrl.replace(/\+/g, ' ');
 
       const params = {
         Bucket: bucketName,
-        Key: file.url,
+        Key: fileUrl,
       };
 
       try {
+        await this.s3.headObject(params).promise();
         await this.s3.deleteObject(params).promise();
-        console.log(`File deleted successfully from `);
 
-        try {
-          await this.filesRepository.delete(file.id);
-        } catch (error) {
+        await this.filesRepository.delete(file.id);
+      } catch (error) {
+        if (error.code === 'NotFound') {
+          throw new Error(`Failed to delete file from S3: ${error.message}`);
+        } else {
           throw new Error(`Failed to delete file from S3: ${error.message}`);
         }
-        return;
-      } catch (error) {
-        throw new Error(`Failed to delete file from S3: ${error.message}`);
       }
-    });
+    }
   }
 }
