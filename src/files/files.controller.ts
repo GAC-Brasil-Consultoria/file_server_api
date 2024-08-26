@@ -81,28 +81,27 @@ export class FilesController {
   }
   @Post('create-folders')
   async createFolder(@Body() body: CreateFolderDto) {
-    
     const companyName = await this.filesService.createFolderByCompany(
       body.companyId,
     );
     return {
       message: 'Pastas criadas com sucesso',
-      log:["Diretorios Criados na empresa: "+companyName]
+      log: ['Diretorios Criados na empresa: ' + companyName],
     };
   }
   @Post('create-folders-program')
   async createFolderByProgram(@Body() body) {
-    
     const programName = await this.filesService.createFolderByProgram(
       body.programId,
-    ); 
+    );
     return {
       message: 'Pastas criadas com sucesso',
-      log:["Diretorios Criados no programa: "+programName]
+      log: ['Diretorios Criados no programa: ' + programName],
     };
-  }S
+  }
+  S;
   @Get('foldersAndFilesByProgram/:id')
-  async foldersAndFilesByProgram(@Param() params: any) { 
+  async foldersAndFilesByProgram(@Param() params: any) {
     const data = await this.filesService.listAllFolders(params.id);
     const resolvedData = await Promise.all(
       data.map(async (folder: any) => {
@@ -130,9 +129,11 @@ export class FilesController {
   }
   @Delete('')
   async deleteFile(@Param() params: any, @Body() body) {
+    console.log(body);
     return {
       message: 'Pastas e arquivos carregados com sucesso',
       data: await this.filesService.delete(body.ids),
     };
   }
 }
+  

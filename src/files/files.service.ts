@@ -276,8 +276,6 @@ export class FilesService {
   }
 
   async delete(ids: any) {
-    // let log = [];
-
     for (const id of ids) {
       const file = await this.filesRepository.findOne({
         where: {
@@ -294,7 +292,6 @@ export class FilesService {
         Bucket: bucketName,
         Key: fileUrl,
       };
-
       try {
         await this.s3.headObject(params).promise();
         await this.s3.deleteObject(params).promise();
@@ -302,7 +299,7 @@ export class FilesService {
         await this.filesRepository.delete(file.id);
       } catch (error) {
         if (error.code === 'NotFound') {
-          throw new Error(`Failed to delete file from S3: ${error.message}`);
+          throw new Error(`Arquivo nao encontrado : ${error.message}`);
         } else {
           throw new Error(`Failed to delete file from S3: ${error.message}`);
         }
