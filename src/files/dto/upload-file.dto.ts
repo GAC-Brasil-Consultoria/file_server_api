@@ -1,14 +1,14 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty } from 'class-validator';
 
-
 export class UploadFileDto {
-
-    @IsNotEmpty()
-    programId: number;
-
-    @IsNotEmpty()
-    userId: number;
-    
-    @IsNotEmpty()
-    fileTypeId: number;
+  @ApiProperty({ example: 1 })
+  @IsNotEmpty()
+  programId: number;
+  @ApiProperty({ example: 1 })
+  @IsNotEmpty()
+  userId: number;
+  @ApiProperty({ example: 1 })
+  @IsNotEmpty()
+  fileTypeId: number;
 }

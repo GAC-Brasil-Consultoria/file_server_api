@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpException,
+  HttpStatus,
   Param,
   Post,
   UploadedFiles,
@@ -10,28 +12,24 @@ import {
 } from '@nestjs/common';
 import { FilesService } from './files.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
-import { ApiConsumes, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { CreateFolderDto } from './dto/create-folder-dto';
+import { FileExtension, FileExtensionType } from 'src/utils/file-extensions';
 
 @Controller('file')
 export class FilesController {
-  private s3Client: S3Client;
-
-  constructor(private filesService: FilesService) {
-    this.s3Client = new S3Client({
-      region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      },
-    });
-  }
+  constructor(private filesService: FilesService) {}
 
   @Post()
   @UseInterceptors(FilesInterceptor('files'))
+  @ApiBody({ type: [UploadFileDto] })
   @ApiOperation({ summary: 'Faz upload de múltiplos arquivos.' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({
@@ -64,19 +62,38 @@ export class FilesController {
     @UploadedFiles(new FileNotEmptyValidator()) files: Express.Multer.File[],
     @Body() uploadFileDto: UploadFileDto,
   ) {
+    const log = [];
     for (const file of files) {
-      await this.filesService.uploadFile(
+      const fileExtension = file.originalname
+        .split('.')
+        .pop()
+        .toLowerCase() as FileExtensionType;
+      
+      if (!FileExtension[fileExtension]) {
+        throw new HttpException(
+          `Invalid file type: ${fileExtension}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const extensionData = FileExtension[fileExtension];
+
+      console.log('File ID:', extensionData.id); // Accessing the ID of the file type
+      const response = await this.filesService.uploadFile(
         file.originalname,
         file.buffer,
         uploadFileDto.programId,
         uploadFileDto.userId,
-        uploadFileDto.fileTypeId,
+        uploadFileDto.fileTypeId, 
+        extensionData.id
       );
+      log.push(response);
     }
 
     return {
       message: 'Arquivos enviador com sucesso',
       data: files,
+      log: log,
     };
   }
   @Post('create-folders')
@@ -85,7 +102,7 @@ export class FilesController {
       body.companyId,
     );
     return {
-      message: 'Pastas criadas com sucesso',
+      message: 'Diretorios Criados na empresa: ' + companyName,
       log: ['Diretorios Criados na empresa: ' + companyName],
     };
   }
@@ -95,7 +112,7 @@ export class FilesController {
       body.programId,
     );
     return {
-      message: 'Pastas criadas com sucesso',
+      message: 'Diretorios Criados no programa: ' + programName,
       log: ['Diretorios Criados no programa: ' + programName],
     };
   }
@@ -129,11 +146,11 @@ export class FilesController {
   }
   @Delete('')
   async deleteFile(@Param() params: any, @Body() body) {
-    console.log(body);
+    const log = await this.filesService.delete(body.ids);
     return {
-      message: 'Pastas e arquivos carregados com sucesso',
-      data: await this.filesService.delete(body.ids),
+      message: 'Arquivos apagados com sucesso',
+      data: [],
+      log: log,
     };
   }
 }
-  

@@ -6,9 +6,12 @@ export class FileLogo {
   @PrimaryGeneratedColumn({name:"id_arquivo_logo"})
   id: number;
 
-  @Column()
-  logo: string;
+  @Column({name:"arquivo_logo_extensao"})
+  extension: string;
 
-  @OneToMany(() => File, file => file.file_logo)
-  files: File[];
+  @Column({name:"arquivo_logo_caminho"})
+  path: string;
+
+  @OneToMany(() => File, arquivo => arquivo.file_logo)
+  files: File[]; 
 }

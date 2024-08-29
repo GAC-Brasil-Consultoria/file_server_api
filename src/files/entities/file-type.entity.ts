@@ -11,7 +11,7 @@ export class FileType {
 
   @Column({ type: 'varchar', length: 100, default: '0', name:"arquivo_tipo_nome"})
   name: string;
-
+  
   @Column({ type: 'varchar', length: 50, default: '0' , name:"arquivo_tipo_sigla" })
   abbreviation: string;
 

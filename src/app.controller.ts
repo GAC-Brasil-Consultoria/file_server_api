@@ -1,17 +1,15 @@
-import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
+import { Controller, Get, Res } from '@nestjs/common';
+import { Response } from 'express';
+import { join } from 'path';import { AppService } from './app.service';
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
   
   @Get()
-  getHello() {
+  getHello(@Res() res: Response) {
 
-    return {
-      message: 'Erro ao enviar o ASDASDS',
-      data: this.appService.getHello(), 
-      
-    };
+    res.sendFile(join(__dirname, '..', 'views', 'index.html'));
+
   }
 }

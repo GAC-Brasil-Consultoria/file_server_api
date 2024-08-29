@@ -55,6 +55,7 @@ export class FilesService {
     programId,
     userId,
     file_type_id,
+    file_logo_id,
   ) {
     const program = await this.programRepository.findOne({
       where: {
@@ -71,28 +72,30 @@ export class FilesService {
         id: file_type_id,
       },
     });
-    console.log(fileType.path);
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const key = `${cnpj}/${program.name}${fileType.path}${fileName}`;
+    const newFileName = fileName.replace(/[\s+]+/g, '_');
+    const key = `${cnpj}/${program.name}${fileType.path}${newFileName}`;
+    console.log(newFileName);
 
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-        Body: file,
-      }),
-    );
+    // await this.s3Client.send(
+    //   new PutObjectCommand({
+    //     Bucket: bucketName,
+    //     Key: key,
+    //     Body: file,
+    //   }),
+    // );
 
-    await this.filesRepository.save({
-      file_type_id: file_type_id,
-      program_id: programId,
-      url: `${key.split('/').map(encodeURIComponent).join('/')}`,
-      user_id: userId,
-      file_logo_id: 1,
-    });
+    // await this.filesRepository.save({
+    //   file_type_id: file_type_id,
+    //   program_id: programId,
+    //   url: `${key.split('/').map(encodeURIComponent).join('/')}`,
+    //   user_id: userId,
+    //   file_logo_id: file_logo_id,
+    //   name: newFileName,
+    // });
 
-    return [];
+    return 'Enviou o arquivo' + newFileName;
   }
   async createFolder(ldb: string, folderName: string = null) {
     if (folderName === 'CONTÁBIL') {
@@ -240,7 +243,6 @@ export class FilesService {
 
     try {
       const data = await this.s3.listObjectsV2(params).promise();
-      console.log(data);
 
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
@@ -258,16 +260,20 @@ export class FilesService {
             where: {
               url: key.split('/').map(encodeURIComponent).join('/'),
             },
+            relations: ['file_logo'],
           });
+
           if (file) {
             return {
               name: match[1],
               id: file.id,
+              file_logo: file.file_logo.path,
             };
           }
           // return match ? match[1] : null;
         })
         .filter(Boolean); // Remove valores nulos
+
       return files;
     } catch (err) {
       console.error('Erro ao listar os arquivos:', err);
@@ -276,6 +282,7 @@ export class FilesService {
   }
 
   async delete(ids: any) {
+    const log = [];
     for (const id of ids) {
       const file = await this.filesRepository.findOne({
         where: {
@@ -283,9 +290,9 @@ export class FilesService {
         },
       });
 
-
       const bucketName = process.env.AWS_S3_BUCKET_NAME;
       let fileUrl = decodeURIComponent(file.url); // Decodificação
+      log.push('Deletou o arquivo: ' + file.url + 'deletado com sucesso!');
       fileUrl = fileUrl.replace(/\+/g, ' ');
 
       const params = {
@@ -297,6 +304,7 @@ export class FilesService {
         await this.s3.deleteObject(params).promise();
 
         await this.filesRepository.delete(file.id);
+        return log;
       } catch (error) {
         if (error.code === 'NotFound') {
           throw new Error(`Arquivo nao encontrado : ${error.message}`);

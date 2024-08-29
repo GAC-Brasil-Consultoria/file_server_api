@@ -43,7 +43,7 @@ export class File {
   // @JoinColumn({ name: 'programa_id' })
   // programa: Programa;
 
-  @ManyToOne(() => FileLogo, file_ => file_.files)
+  @ManyToOne(() => FileLogo, file_logo => file_logo.files)
   @JoinColumn({ name: 'arquivo_logo_id' })
   file_logo: FileLogo;
 }
