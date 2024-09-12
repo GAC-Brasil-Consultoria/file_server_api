@@ -78,24 +78,24 @@ export class FilesService {
     const key = `${cnpj}/${program.name}${fileType.path}${newFileName}`;
     console.log(newFileName);
 
-    // await this.s3Client.send(
-    //   new PutObjectCommand({
-    //     Bucket: bucketName,
-    //     Key: key,
-    //     Body: file,
-    //   }),
-    // );
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: file,
+      }),
+    );
 
-    // await this.filesRepository.save({
-    //   file_type_id: file_type_id,
-    //   program_id: programId,
-    //   url: `${key.split('/').map(encodeURIComponent).join('/')}`,
-    //   user_id: userId,
-    //   file_logo_id: file_logo_id,
-    //   name: newFileName,
-    // });
+    await this.filesRepository.save({
+      file_type_id: file_type_id,
+      program_id: programId,
+      url: `${key.split('/').map(encodeURIComponent).join('/')}`,
+      user_id: userId,
+      file_logo_id: file_logo_id,
+      name: newFileName,
+    });
 
-    return 'Enviou o arquivo' + newFileName;
+    return 'Enviou o arquivo ' + newFileName;
   }
   async createFolder(ldb: string, folderName: string = null) {
     if (folderName === 'CONTÁBIL') {
@@ -283,7 +283,7 @@ export class FilesService {
 
   async delete(ids: any) {
     const log = [];
-    for (const id of ids) {
+    ids.forEach(async (id) => {
       const file = await this.filesRepository.findOne({
         where: {
           id: id,
@@ -312,6 +312,9 @@ export class FilesService {
           throw new Error(`Failed to delete file from S3: ${error.message}`);
         }
       }
-    }
+    });
+    // for (const id of ids) {
+
+    // }
   }
 }

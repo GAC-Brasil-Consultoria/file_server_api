@@ -29,8 +29,6 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, any> {
         }),
       );
     }
-
-    // Se a resposta não for JSON, passa pelo interceptor sem modificações
     return next.handle();
   }
 }

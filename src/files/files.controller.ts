@@ -78,7 +78,6 @@ export class FilesController {
 
       const extensionData = FileExtension[fileExtension];
 
-      console.log('File ID:', extensionData.id); // Accessing the ID of the file type
       const response = await this.filesService.uploadFile(
         file.originalname,
         file.buffer,
