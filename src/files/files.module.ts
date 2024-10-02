@@ -8,9 +8,9 @@ import { Program } from './entities/program.entity';
 // import { Company } from './entities/company.entity';
 
 @Module({
-  providers: [FilesService],
-  controllers: [FilesController],
   imports: [TypeOrmModule.forFeature([File, Company, Program])],
-  exports: [FilesService, TypeOrmModule],
+  controllers: [FilesController],
+  providers: [FilesService],
+  exports: [FilesService]
 })
 export class FilesModule {}
