@@ -10,6 +10,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
+import { UploadFileDto } from './dto/upload-file.dto';
 // import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // import { Company } from './entities/company.entity';
@@ -46,10 +47,10 @@ export class FilesService {
     });
   }
 
-  public async uploadFile(fileName: string, file: Buffer, programId) {
+  public async uploadFile(fileName: string, file: Buffer, uploadFileDto: UploadFileDto) {
     const program = await this.programRepository.findOne({
       where: {
-        id: programId,
+        id: uploadFileDto.programId,
       },
     });
 
@@ -72,11 +73,14 @@ export class FilesService {
     );
 
     await this.filesRepository.save({
-      file_type_id: 1,
-      program_id: programId,
+      name: fileName,
+      file_type_id: uploadFileDto.fileTypeId,
+      program_id: uploadFileDto.programId,
+      user_id: uploadFileDto.userId,
+      file_logo_id: 1,
       url: `${key}`,
     });
-    return [];
+    return program;
   }
   async createFolder(ldb: string, folderName: string = null) {
     if (folderName === 'CONTÁBIL') {
@@ -132,20 +136,27 @@ export class FilesService {
   }
   async createFolders(body: any) {
     
-    const program = await this.programRepository.findOneBy({
-      id: body.programId,
-    });
     const company = await this.companyRepository.findOneBy({
-      id: program.companyId,
+      id: body.companyId,
     });
+    const programs = await this.programRepository.find({
+      where: {
+        companyId: company.id,
+      },
+    });
+    
 
-    const programName = program.name;
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
-    const ldb = `${cnpj}/${programName}`;
-    await this.createFolder(ldb);
-    await this.createFolder(ldb, 'CONTÁBIL');
-    await this.createFolder(ldb, 'TÉCNICO');
-    await this.createFolder(ldb, 'ENTREGÁVEL');
+    for (const program of programs) {
+      const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
+      const ldb = `${cnpj}/${program.name}`;
+      const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
+      for (const folder of folders) {
+        await this.createFolder(ldb, folder);
+      }
+    }
+
+    return programs;
+    
   }
 
   async listAllFolders(programId: number) {
