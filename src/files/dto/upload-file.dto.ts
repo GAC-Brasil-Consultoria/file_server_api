@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 export class UploadFileDto {
   @IsNotEmpty()
@@ -16,4 +16,8 @@ export class UploadFileDto {
   @IsNumber()
   @Type(() => Number)
   fileTypeId: number;
+
+  @IsNotEmpty()
+  @IsString()
+  folderTree: string;
 }
