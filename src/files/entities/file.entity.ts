@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 @Entity("arquivos")
 export class File {
   @PrimaryGeneratedColumn({ name: 'id_arquivo' })
@@ -28,5 +28,7 @@ export class File {
   @Column({ name: 'user_id' })
   user_id: number;
 
+  @CreateDateColumn({ name: 'criado_em', type: 'timestamp' })
+  created_at: Date;
 
 }
