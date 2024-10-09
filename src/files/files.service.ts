@@ -206,16 +206,17 @@ export class FilesService {
     );
   }
 
-  async listFiles(folder) {
-   
+  async listFiles(folder: string) {
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
       Prefix: folder,
+      Delimiter: '/',
     };
-
+  
     try {
       const data = await this.s3.listObjectsV2(params).promise();
       
+      // Filtrar somente os arquivos que estão na raiz da pasta, sem subpastas
       const files = data.Contents.map((item) => item.Key)
         .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
         .map((key) => {
@@ -223,13 +224,14 @@ export class FilesService {
           return match ? match[1] : null;
         })
         .filter(Boolean); // Remove valores nulos
-
+  
       return files;
     } catch (err) {
       console.error('Erro ao listar os arquivos:', err);
       throw err;
     }
   }
+  
 
   // async checkIfObjectExists(bucket, key) {
   //   try {
