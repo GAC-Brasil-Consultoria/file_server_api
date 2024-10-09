@@ -17,7 +17,11 @@ import { UploadFileDto } from './dto/upload-file.dto';
 export interface FolderNode {
   name: string;
   subfolders: FolderNode[];
-  files: any;
+  files: {
+    id: number;
+    name: string;
+    url: string;
+  }[];
 }
 @Injectable()
 export class FilesService {
@@ -178,33 +182,36 @@ export class FilesService {
 
   async getAllSubfolders(folderName: string): Promise<FolderNode> {
     const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-
+  
     const fetchSubfolders = async (prefix: string): Promise<FolderNode> => {
       const command = new ListObjectsV2Command({
         Bucket: bucketName,
         Prefix: prefix,
         Delimiter: '/',
       });
-
+  
       const response = await this.s3Client.send(command);
       const subfolders =
         response.CommonPrefixes?.map((prefix) => prefix.Prefix) ?? [];
       const subfolderNodes = await Promise.all(subfolders.map(fetchSubfolders));
+  
       const regex = /\/([^\/]+)\/?$/;
       const match = prefix.match(regex);
+  
+      // Listar arquivos e incluir ID, nome e URL
       const files = await this.listFiles(prefix);
       
       return {
-        name: match[1],
+        name: match ? match[1] : null,
         subfolders: subfolderNodes,
-        files: files,
+        files: files, // Agora inclui ID, nome e URL
       };
     };
-
+  
     return await fetchSubfolders(
       folderName.endsWith('/') ? folderName : `${folderName}/`,
     );
-  }
+  }  
 
   async listFiles(folder: string) {
     const params = {
@@ -217,13 +224,32 @@ export class FilesService {
       const data = await this.s3.listObjectsV2(params).promise();
       
       // Filtrar somente os arquivos que estão na raiz da pasta, sem subpastas
-      const files = data.Contents.map((item) => item.Key)
-        .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
-        .map((key) => {
-          const match = key.match(/\/([^\/]+)\/?$/);
-          return match ? match[1] : null;
+      const filesInS3 = data.Contents
+        .filter((item) => !item.Key.endsWith('/')) // Filtra apenas os arquivos
+        .map((item) => {
+          const match = item.Key.match(/\/([^\/]+)\/?$/);
+          return {
+            name: match ? match[1] : null,  // Nome do arquivo
+            fullPath: item.Key  // Caminho completo no S3
+          };
         })
-        .filter(Boolean); // Remove valores nulos
+        .filter(file => file.name && file.fullPath); // Remove valores nulos
+  
+      // Buscar os arquivos no banco de dados que correspondem ao nome e ao caminho completo
+      const filesInDb = await this.filesRepository.find({
+        where: filesInS3.map(file => ({ name: file.name, url: file.fullPath })),
+      });
+  
+      // Combinar as informações de arquivos no S3 e no banco de dados
+      const files = filesInS3.map(fileInS3 => {
+        const fileInDb = filesInDb.find(file => file.url === fileInS3.fullPath);
+  
+        return {
+          id: fileInDb ? fileInDb.id : null,
+          name: fileInS3.name,
+          url: `https://${params.Bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileInS3.fullPath}`
+        };
+      });
   
       return files;
     } catch (err) {
