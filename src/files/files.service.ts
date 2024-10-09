@@ -262,8 +262,9 @@ export class FilesService {
 
     try {
       await this.s3.deleteObject(params).promise();
+      await this.filesRepository.delete(file.id);
       console.log(`File deleted successfully from `);
-      return;
+      return file;
     } catch (error) {
       throw new Error(`Failed to delete file from S3: ${error.message}`);
     }
