@@ -62,7 +62,7 @@ export class FilesService {
 
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const key = `${cnpj}/${program.name}/CONTÁBIL/Notas Fiscais/${fileName}`;
+    const key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
 
     await this.s3Client.send(
       new PutObjectCommand({
