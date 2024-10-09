@@ -87,9 +87,12 @@ export class FilesController {
   }
   @Delete(':id')
   async deleteFile(@Param() params: any) {
+    console.log(params);
+    const result = await this.filesService.delete(params.id)
     return {
-      message: 'Pastas e arquivos carregados com sucesso',
-      data: await this.filesService.delete(params.id),
+      message: 'Arquivo deletado com sucesso',
+      data: result,
+      log: [`Deletou arquivo ${result.name}`],
     };
   }
 }
