@@ -10,13 +10,18 @@ import {
 } from '@aws-sdk/client-s3';
 import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
+import { UploadFileDto } from './dto/upload-file.dto';
 // import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // import { Company } from './entities/company.entity';
 export interface FolderNode {
   name: string;
   subfolders: FolderNode[];
-  files: any;
+  files: {
+    id: number;
+    name: string;
+    url: string;
+  }[];
 }
 @Injectable()
 export class FilesService {
@@ -46,10 +51,10 @@ export class FilesService {
     });
   }
 
-  public async uploadFile(fileName: string, file: Buffer, programId) {
+  public async uploadFile(fileName: string, file: Buffer, uploadFileDto: UploadFileDto) {
     const program = await this.programRepository.findOne({
       where: {
-        id: programId,
+        id: uploadFileDto.programId,
       },
     });
 
@@ -61,7 +66,7 @@ export class FilesService {
 
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const key = `${cnpj}/${program.name}/CONTÁBIL/Notas Fiscais/${fileName}`;
+    const key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
 
     await this.s3Client.send(
       new PutObjectCommand({
@@ -72,11 +77,14 @@ export class FilesService {
     );
 
     await this.filesRepository.save({
-      file_type_id: 1,
-      program_id: programId,
+      name: fileName,
+      file_type_id: uploadFileDto.fileTypeId,
+      program_id: uploadFileDto.programId,
+      user_id: uploadFileDto.userId,
+      file_logo_id: 1,
       url: `${key}`,
     });
-    return [];
+    return program;
   }
   async createFolder(ldb: string, folderName: string = null) {
     if (folderName === 'CONTÁBIL') {
@@ -132,20 +140,27 @@ export class FilesService {
   }
   async createFolders(body: any) {
     
-    const program = await this.programRepository.findOneBy({
-      id: body.programId,
-    });
     const company = await this.companyRepository.findOneBy({
-      id: program.companyId,
+      id: body.companyId,
     });
+    const programs = await this.programRepository.find({
+      where: {
+        companyId: company.id,
+      },
+    });
+    
 
-    const programName = program.name;
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
-    const ldb = `${cnpj}/${programName}`;
-    await this.createFolder(ldb);
-    await this.createFolder(ldb, 'CONTÁBIL');
-    await this.createFolder(ldb, 'TÉCNICO');
-    await this.createFolder(ldb, 'ENTREGÁVEL');
+    for (const program of programs) {
+      const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
+      const ldb = `${cnpj}/${program.name}`;
+      const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
+      for (const folder of folders) {
+        await this.createFolder(ldb, folder);
+      }
+    }
+
+    return programs;
+    
   }
 
   async listAllFolders(programId: number) {
@@ -167,58 +182,82 @@ export class FilesService {
 
   async getAllSubfolders(folderName: string): Promise<FolderNode> {
     const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-
+  
     const fetchSubfolders = async (prefix: string): Promise<FolderNode> => {
       const command = new ListObjectsV2Command({
         Bucket: bucketName,
         Prefix: prefix,
         Delimiter: '/',
       });
-
+  
       const response = await this.s3Client.send(command);
       const subfolders =
         response.CommonPrefixes?.map((prefix) => prefix.Prefix) ?? [];
       const subfolderNodes = await Promise.all(subfolders.map(fetchSubfolders));
+  
       const regex = /\/([^\/]+)\/?$/;
       const match = prefix.match(regex);
+  
+      // Listar arquivos e incluir ID, nome e URL
       const files = await this.listFiles(prefix);
       
       return {
-        name: match[1],
+        name: match ? match[1] : null,
         subfolders: subfolderNodes,
-        files: files,
+        files: files, // Agora inclui ID, nome e URL
       };
     };
-
+  
     return await fetchSubfolders(
       folderName.endsWith('/') ? folderName : `${folderName}/`,
     );
-  }
+  }  
 
-  async listFiles(folder) {
-   
+  async listFiles(folder: string) {
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
       Prefix: folder,
+      Delimiter: '/',
     };
-
+  
     try {
       const data = await this.s3.listObjectsV2(params).promise();
       
-      const files = data.Contents.map((item) => item.Key)
-        .filter((key) => !key.endsWith('/')) // Filtra apenas os arquivos
-        .map((key) => {
-          const match = key.match(/\/([^\/]+)\/?$/);
-          return match ? match[1] : null;
+      // Filtrar somente os arquivos que estão na raiz da pasta, sem subpastas
+      const filesInS3 = data.Contents
+        .filter((item) => !item.Key.endsWith('/')) // Filtra apenas os arquivos
+        .map((item) => {
+          const match = item.Key.match(/\/([^\/]+)\/?$/);
+          return {
+            name: match ? match[1] : null,  // Nome do arquivo
+            fullPath: item.Key  // Caminho completo no S3
+          };
         })
-        .filter(Boolean); // Remove valores nulos
-
+        .filter(file => file.name && file.fullPath); // Remove valores nulos
+  
+      // Buscar os arquivos no banco de dados que correspondem ao nome e ao caminho completo
+      const filesInDb = await this.filesRepository.find({
+        where: filesInS3.map(file => ({ name: file.name, url: file.fullPath })),
+      });
+  
+      // Combinar as informações de arquivos no S3 e no banco de dados
+      const files = filesInS3.map(fileInS3 => {
+        const fileInDb = filesInDb.find(file => file.url === fileInS3.fullPath);
+  
+        return {
+          id: fileInDb ? fileInDb.id : null,
+          name: fileInS3.name,
+          url: `https://${params.Bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileInS3.fullPath}`
+        };
+      });
+  
       return files;
     } catch (err) {
       console.error('Erro ao listar os arquivos:', err);
       throw err;
     }
   }
+  
 
   // async checkIfObjectExists(bucket, key) {
   //   try {
@@ -249,8 +288,9 @@ export class FilesService {
 
     try {
       await this.s3.deleteObject(params).promise();
+      await this.filesRepository.delete(file.id);
       console.log(`File deleted successfully from `);
-      return;
+      return file;
     } catch (error) {
       throw new Error(`Failed to delete file from S3: ${error.message}`);
     }
