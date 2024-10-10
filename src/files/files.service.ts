@@ -179,31 +179,39 @@ export class FilesService {
     };
 
     try {
-      const data = await this.s3Client.send(new ListObjectsV2Command(params));
+      const data = await this.s3.listObjectsV2(params).promise();
 
       if (!data || !data.Contents) {
-        // Retorna um array vazio se não houver conteúdo (nenhum arquivo)
+        console.log('Nenhum arquivo encontrado para o prefixo:', folder);
         return [];
       }
 
-      // Filtrar somente os arquivos que estão na raiz da pasta, sem subpastas
-      const files = data.Contents.filter((item) => !item.Key.endsWith('/')).map(async (item) => {
-        const key = item.Key;
-        const fileEntity = await this.filesRepository.findOne({ where: { url: key } });
+      // Para cada arquivo, busque no banco de dados e adicione a chave S3 no retorno
+      const files = await Promise.all(
+        data.Contents
+          .filter((item) => !item.Key.endsWith('/'))  // Exclui pastas (chaves que terminam com '/')
+          .map(async (item) => {
+            const key = item.Key;
+            const url = `https://${params.Bucket}.s3.amazonaws.com/${key}`;
 
-        return {
-          id: fileEntity ? fileEntity.id : null,
-          name: key ? key.split('/').pop() : null,
-          url: `https://${params.Bucket}.s3.amazonaws.com/${key}`, // URL completa do arquivo no S3
-        };
-      });
+            // Busca o arquivo no banco de dados usando a URL do S3 (Key)
+            const fileEntity = await this.filesRepository.findOne({
+              where: { url: key },  // A busca está sendo feita usando a chave salva no banco
+            });
 
-      // Resolve as promessas e retorna os arquivos
-      return await Promise.all(files);
+            return {
+              id: fileEntity ? fileEntity.id : null,  // Se o arquivo for encontrado, retorna o ID, caso contrário, null
+              name: key ? key.split('/').pop() : null,  // Nome do arquivo
+              url: url,  // URL completa do arquivo
+              s3Key: key,  // Chave S3 do arquivo
+            };
+          })
+      );
+
+      return files;
     } catch (err) {
-      console.error('Erro ao listar os arquivos:', err);
-      // Retorna um array vazio em caso de erro
-      return [];
+      console.error('Erro ao listar os arquivos do S3:', err);
+      throw err;
     }
   }
 
