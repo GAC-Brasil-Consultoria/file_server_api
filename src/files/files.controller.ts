@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  HttpException,
   Param,
   Post,
   Req,
@@ -20,15 +21,12 @@ import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
 import { DataSource } from 'typeorm';
 import { Program } from './entities/program.entity';
 
-//Necessario refatorar os parametros de alguns métodos do controller para o padrao DTO
-//e nao usar o request.body para facilitar a validação da requisição
-//Também é necessário refatorar o service para receber o DTO
 @Controller('file')
 export class FilesController {
   private s3Client: S3Client;
 
   constructor(
-    private filesService: FilesService,
+    private readonly filesService: FilesService,
     private readonly dataSource: DataSource,
   ) {
     this.s3Client = new S3Client({
@@ -40,6 +38,7 @@ export class FilesController {
     });
   }
 
+  // Upload de arquivos para o AWS S3 com validação via DTO
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FilesInterceptor('files'))
@@ -52,47 +51,80 @@ export class FilesController {
         this.filesService.uploadFile(file.originalname, file.buffer, uploadFileDto),
       ),
     );
-    
-    const targetProgram = results[0] as PromiseFulfilledResult<Program>;
+
+    // Aqui fazemos a verificação para garantir que o resultado foi um sucesso
+    const fulfilledResult = results.find(result => result.status === 'fulfilled') as PromiseFulfilledResult<{ message: string; program: Program }>;
+
+    if (!fulfilledResult) {
+      throw new HttpException('Erro ao enviar arquivos', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    const targetProgram = fulfilledResult.value.program;
 
     return {
       message: 'Arquivos enviados com sucesso',
-      log: [ `Arquivos enviados para o programa: ${targetProgram.value.name} <br> - ${files.map((f) => f.originalname).join('<br>- ')}`],
-    };
-  }
-
-  @Post('create-folders')
-  @HttpCode(201)
-  async createFolder(@Req() request: Request) {
-    // return request.body
-    /* console.log(request.body);
-    const connection = this.dataSource.options;
-    console.log({ connection }) */
-
-    const programs = await this.filesService.createFolders(request.body);
-    return {
-      message: 'Pastas criadas com sucesso!!!',
-      data: [],
       log: [
-        `Cirou diretórios padrões para os programas: <br>- ${programs.map((p) => p.name).join('<br>- ')}`,
+        `Arquivos enviados para o programa: ${targetProgram.name} <br> - ${files
+          .map((f) => f.originalname)
+          .join('<br>- ')}`,
       ],
     };
   }
-  @Get('foldersAndFilesByProgram/:id')
-  async foldersAndFilesByProgram(@Param() params: any) {
+
+  // Criação de pastas com base no DTO
+  @Post('create-folders')
+  @HttpCode(201)
+  async createFolder(@Body() body: any) {
+    // Recebe o body direto via DTO, e não mais via request.body
+    const programs = await this.filesService.createFolders(body);
     return {
-      message: 'Pastas e arquivos carregados com sucesso',
-      data: await this.filesService.listAllFolders(params.id),
+      message: 'Pastas criadas com sucesso!',
+      data: [],
+      log: [
+        `Criou diretórios padrões para os programas: <br>- ${programs
+          .map((p) => p.name)
+          .join('<br>- ')}`,
+      ],
     };
   }
+
+  // Lista todas as pastas e arquivos por programa
+  @Get('foldersAndFilesByProgram/:id')
+  async foldersAndFilesByProgram(@Param('id') id: number) {
+    try {
+      const data = await this.filesService.listAllFolders(id);
+      return {
+        message: 'Pastas e arquivos carregados com sucesso',
+        data,
+      };
+    } catch (error) {
+      console.error(
+        `Erro ao carregar pastas e arquivos para o programa ${id}:`,
+        error,
+      );
+      throw new HttpException(
+        'Erro ao carregar pastas e arquivos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  // Deletar arquivo por ID
   @Delete(':id')
-  async deleteFile(@Param() params: any) {
-    console.log(params);
-    const result = await this.filesService.delete(params.id)
-    return {
-      message: 'Arquivo deletado com sucesso',
-      data: result,
-      log: [`Deletou arquivo ${result.name}`],
-    };
+  async deleteFile(@Param('id') id: number) {
+    try {
+      const result = await this.filesService.delete(id);
+      return {
+        message: 'Arquivo deletado com sucesso',
+        data: result,
+        log: [`Deletou arquivo ${result.name}`],
+      };
+    } catch (error) {
+      console.error(`Erro ao deletar arquivo com ID ${id}:`, error);
+      throw new HttpException(
+        'Erro ao deletar arquivo',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }
