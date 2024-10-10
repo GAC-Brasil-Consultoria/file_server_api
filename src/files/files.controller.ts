@@ -105,18 +105,21 @@ export class FilesController {
     }
   }
 
-  // Deletar arquivo por ID
-  @Delete(':id')
-  async deleteFile(@Param('id') id: number) {
+  // Deletar arquivo por s3Key
+  @Delete()
+  async deleteFile(@Body('s3Key') s3Key: string) {
+    if (!s3Key) {
+      throw new HttpException('Chave S3 (s3Key) é obrigatória', HttpStatus.BAD_REQUEST);
+    }
+
     try {
-      const result = await this.filesService.delete(id);
+      const result = await this.filesService.deleteByS3Key(s3Key);
       return {
         message: 'Arquivo deletado com sucesso',
-        data: result,
-        log: [`Deletou arquivo ${result.name}`],
+        log: [`Deletou arquivo com S3 Key: ${s3Key}`],
       };
     } catch (error) {
-      console.error(`Erro ao deletar arquivo com ID ${id}:`, error);
+      console.error(`Erro ao deletar arquivo com S3 Key ${s3Key}:`, error);
       throw new HttpException(
         'Erro ao deletar arquivo',
         HttpStatus.INTERNAL_SERVER_ERROR,

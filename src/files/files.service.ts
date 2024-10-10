@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from './entities/file.entity';
@@ -230,23 +230,39 @@ export class FilesService {
   }
 
   // Deletar arquivos de uma pasta no S3 e banco de dados
-  async delete(id: number) {
-    const file = await this.filesRepository.findOne({ where: { id } });
-    if (!file) throw new Error('Arquivo não encontrado');
-
+  async deleteByS3Key(s3Key: string) {
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: file.s3Key,  // Agora utilizamos a chave S3 salva no banco para deletar
+      Key: s3Key,  // Usando a s3Key diretamente passada como parâmetro
     };
-
+  
     try {
+      // Verificar se o arquivo existe no banco de dados usando a s3Key
+      const fileEntity = await this.filesRepository.findOne({ where: { s3Key } });
+  
+      if (!fileEntity) {
+        // Lançando uma exceção HTTP com uma mensagem amigável
+        console.log(`Arquivo com S3Key ${s3Key} não encontrado no banco de dados.`);
+        throw new HttpException(
+          `Arquivo não encontrado no banco de dados para a chave S3: ${s3Key}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+  
+      // Deletar o objeto do S3
       await this.s3.deleteObject(params).promise();
-      await this.filesRepository.delete(file.id);
-      console.log(`Arquivo deletado com sucesso: ${file.s3Key}`);
-      return file;
+      console.log(`Arquivo deletado com sucesso: ${s3Key}`);
+  
+      // Deletar o arquivo do banco de dados
+      await this.filesRepository.delete(fileEntity.id);
+  
+      return { message: 'Arquivo deletado com sucesso', s3Key };
     } catch (error) {
       console.error('Erro ao deletar arquivo do S3:', error);
-      throw new Error(`Erro ao deletar arquivo do S3: ${error.message}`);
+      throw new HttpException(
+        `Erro ao deletar arquivo do S3: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
-  }
+  }  
 }
