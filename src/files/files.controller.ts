@@ -8,17 +8,14 @@ import {
   HttpException,
   Param,
   Post,
-  Req,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { Request } from 'express';
 import { FilesService } from './files.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
-import { DataSource } from 'typeorm';
 import { Program } from './entities/program.entity';
 
 @Controller('file')
@@ -27,7 +24,6 @@ export class FilesController {
 
   constructor(
     private readonly filesService: FilesService,
-    private readonly dataSource: DataSource,
   ) {
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
@@ -46,13 +42,14 @@ export class FilesController {
     @UploadedFiles(new FileNotEmptyValidator()) files: Express.Multer.File[],
     @Body() uploadFileDto: UploadFileDto,
   ) {
+    // Faz o upload de cada arquivo e aguarda a conclusão
     const results = await Promise.allSettled(
       files.map((file) =>
         this.filesService.uploadFile(file.originalname, file.buffer, uploadFileDto),
       ),
     );
 
-    // Aqui fazemos a verificação para garantir que o resultado foi um sucesso
+    // Verifica se houve sucesso em algum dos uploads
     const fulfilledResult = results.find(result => result.status === 'fulfilled') as PromiseFulfilledResult<{ message: string; program: Program }>;
 
     if (!fulfilledResult) {
@@ -75,7 +72,6 @@ export class FilesController {
   @Post('create-folders')
   @HttpCode(201)
   async createFolder(@Body() body: any) {
-    // Recebe o body direto via DTO, e não mais via request.body
     const programs = await this.filesService.createFolders(body);
     return {
       message: 'Pastas criadas com sucesso!',

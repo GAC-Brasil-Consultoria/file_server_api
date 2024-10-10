@@ -47,7 +47,12 @@ export class FilesService {
   }
 
   // Upload de arquivos para o S3
-  public async uploadFile(fileName: string, file: Buffer, uploadFileDto: UploadFileDto) {
+  public async uploadFile(
+    fileName: string,
+    file: Buffer,
+    uploadFileDto: UploadFileDto,
+  ) {
+    // 1. Buscar informações do programa e da empresa
     const program = await this.programRepository.findOne({
       where: { id: uploadFileDto.programId },
     });
@@ -58,26 +63,35 @@ export class FilesService {
     });
     if (!company) throw new Error('Empresa não encontrada');
 
+    // 2. Gerar o caminho da chave S3 (s3Key)
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
+    const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
 
+    // 3. Fazer o upload do arquivo para o S3
     await this.s3Client.send(
       new PutObjectCommand({
         Bucket: bucketName,
-        Key: key,
+        Key: s3Key,
         Body: file,
       }),
     );
 
-    await this.filesRepository.save({
+    // 4. Gerar a URL pública ou assinada
+    const fileUrl = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // 5. Salvar informações no banco de dados, incluindo a chave S3 e a URL
+    const newFile = this.filesRepository.create({
       name: fileName,
+      s3Key: s3Key,  // Chave S3 salva no banco
+      url: fileUrl,  // URL pública
       file_type_id: uploadFileDto.fileTypeId,
       program_id: uploadFileDto.programId,
       user_id: uploadFileDto.userId,
-      file_logo_id: 1,
-      url: `${key}`,
+      file_logo_id: 1,  // Ajuste conforme necessário
     });
+
+    await this.filesRepository.save(newFile);
 
     return { message: 'Arquivo enviado com sucesso', program };
   }
@@ -194,9 +208,9 @@ export class FilesService {
             const key = item.Key;
             const url = `https://${params.Bucket}.s3.amazonaws.com/${key}`;
 
-            // Busca o arquivo no banco de dados usando a URL do S3 (Key)
+            // Busca o arquivo no banco de dados usando a s3Key (chave S3)
             const fileEntity = await this.filesRepository.findOne({
-              where: { url: key },  // A busca está sendo feita usando a chave salva no banco
+              where: { s3Key: key },  // A busca está sendo feita usando a chave S3 salva no banco
             });
 
             return {
@@ -222,13 +236,13 @@ export class FilesService {
 
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: file.url,
+      Key: file.s3Key,  // Agora utilizamos a chave S3 salva no banco para deletar
     };
 
     try {
       await this.s3.deleteObject(params).promise();
       await this.filesRepository.delete(file.id);
-      console.log(`Arquivo deletado com sucesso: ${file.url}`);
+      console.log(`Arquivo deletado com sucesso: ${file.s3Key}`);
       return file;
     } catch (error) {
       console.error('Erro ao deletar arquivo do S3:', error);
