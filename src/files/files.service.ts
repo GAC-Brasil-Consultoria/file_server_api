@@ -1,28 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from './entities/file.entity';
+
 import * as AWS from 'aws-sdk';
 import {
   S3Client,
   PutObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,  // Certifique-se de importar este comando
 } from '@aws-sdk/client-s3';
 import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
 import { UploadFileDto } from './dto/upload-file.dto';
-// import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-// import { Company } from './entities/company.entity';
 export interface FolderNode {
   name: string;
   subfolders: FolderNode[];
-  files: {
-    id: number;
-    name: string;
-    url: string;
-  }[];
+  files: any;
 }
+
 @Injectable()
 export class FilesService {
   private s3: AWS.S3;
@@ -43,7 +40,7 @@ export class FilesService {
     });
 
     this.s3Client = new S3Client({
-      region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
+      region: process.env.AWS_REGION,
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -51,118 +48,160 @@ export class FilesService {
     });
   }
 
-  public async uploadFile(fileName: string, file: Buffer, uploadFileDto: UploadFileDto) {
+  // Upload de arquivos para o S3
+  public async uploadFile(
+    fileName: string,
+    file: Buffer,
+    uploadFileDto: UploadFileDto,
+  ) {
+    // 1. Buscar informações do programa e da empresa
     const program = await this.programRepository.findOne({
-      where: {
-        id: uploadFileDto.programId,
-      },
+      where: { id: uploadFileDto.programId },
     });
+    if (!program) throw new Error('Programa não encontrado');
 
     const company = await this.companyRepository.findOne({
-      where: {
-        id: program.companyId,
-      },
+      where: { id: program.companyId },
     });
+    if (!company) throw new Error('Empresa não encontrada');
 
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
+    // 2. Gerar o caminho da chave S3 (s3Key)
+    const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove os caracteres especiais do CNPJ
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
+    const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`; // Chave S3
 
+    // 3. Fazer o upload do arquivo para o S3
     await this.s3Client.send(
       new PutObjectCommand({
         Bucket: bucketName,
-        Key: key,
+        Key: s3Key,
         Body: file,
       }),
     );
 
-    await this.filesRepository.save({
+    // 4. Gerar a URL pública do arquivo no S3
+    const fileUrl = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+
+    // 5. Salvar informações no banco de dados, incluindo a chave S3 e a URL
+    const newFile = this.filesRepository.create({
       name: fileName,
+      s3Key: s3Key,  // Chave S3 salva no banco
+      url: fileUrl,  // URL pública
       file_type_id: uploadFileDto.fileTypeId,
       program_id: uploadFileDto.programId,
       user_id: uploadFileDto.userId,
-      file_logo_id: 1,
-      url: `${key}`,
+      file_logo_id: 1,  // Ajuste conforme necessário
     });
-    return program;
+
+    await this.filesRepository.save(newFile);
+
+    // 6. Retornar as informações do arquivo na estrutura desejada
+    return { name: fileName, url: fileUrl, s3Key: s3Key };
   }
+
+  // Criação de pastas específicas com subpastas
   async createFolder(ldb: string, folderName: string = null) {
-    if (folderName === 'CONTÁBIL') {
-      const subFolders = [
-        'Controles internos',
-        'Notas Fiscais',
-        'RH',
-        'Timesheet',
-        'Valoração',
-      ];
+    const folderMap = {
+      'CONTÁBIL': ['Controles internos', 'Notas Fiscais', 'RH', 'Timesheet', 'Valoração'],
+      'TÉCNICO': ['Anexo FORMP&D', 'Arquivado', 'Documentação Técnica', 'Imagens'],
+      'ENTREGÁVEL': ['Dossiê', 'FORMP&D', 'Parecer MCTI', 'Relatório Gerencial'],
+    };
 
-      for (const subFolder of subFolders) {
-        const params = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: `${ldb}/CONTÁBIL/${subFolder}/`, // Note the trailing slash to create a folder
-          Body: '',
-        };
-        await this.s3.putObject(params).promise();
-      }
-    } else if (folderName === 'TÉCNICO') {
-      const subFolders = [
-        'Anexo FORMP&D',
-        'Arquivado',
-        'Documentação Técnica',
-        'Imagens',
-      ];
+    const subFolders = folderMap[folderName] || [];
 
-      for (const subFolder of subFolders) {
-        const params = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: `${ldb}/TÉCNICO/${subFolder}/`, // Note the trailing slash to create a folder
-          Body: '',
-        };
-        await this.s3.putObject(params).promise();
-      }
-    } else {
-      const subFolders = [
-        'Dossiê',
-        'FORMP&D',
-        'Parecer MCTI',
-        'Relatório Gerencial',
-      ];
+    for (const subFolder of subFolders) {
+      const params = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: `${ldb}/${folderName}/${subFolder}/`, // Trailing slash para criar a pasta
+        Body: '',
+      };
 
-      for (const subFolder of subFolders) {
-        const params = {
-          Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: `${ldb}/ENTREGÁVEL/${subFolder}/`, // Note the trailing slash to create a folder
-          Body: '',
-        };
-        await this.s3.putObject(params).promise();
+      // Log para verificar os parâmetros antes de fazer a chamada ao S3
+      console.log(`Criando pasta: ${params.Key} no bucket: ${params.Bucket}`);
+
+      try {
+        const result = await this.s3.putObject(params).promise();
+
+        // Log para verificar a resposta da operação de criação no S3
+        console.log(`Pasta criada com sucesso: ${params.Key}`, result);
+      } catch (error) {
+        // Log para verificar se houve algum erro ao tentar criar a pasta no S3
+        console.error(`Erro ao criar pasta: ${params.Key}`, error);
+        throw new HttpException(
+          `Erro ao criar pasta no S3: ${error.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
     }
   }
-  async createFolders(body: any) {
-    
-    const company = await this.companyRepository.findOneBy({
-      id: body.companyId,
-    });
-    const programs = await this.programRepository.find({
-      where: {
-        companyId: company.id,
-      },
-    });
-    
 
+  // Criação de múltiplas pastas com subpastas para cada programa
+  async createFolders(body: any) {
+    let company: Company;
+    let programs: Program[] = [];
+
+    // Verificar se foi passado o companyId ou programId
+    if (body.companyId) {
+      // Buscar a empresa pelo companyId
+      company = await this.companyRepository.findOneBy({ id: body.companyId });
+      if (!company) {
+        console.error(`Empresa com ID ${body.companyId} não encontrada.`);
+        throw new HttpException('Empresa não encontrada', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar todos os programas associados à empresa
+      programs = await this.programRepository.find({ where: { companyId: company.id } });
+      if (!programs.length) {
+        console.error(`Nenhum programa encontrado para a empresa ${company.id}.`);
+        throw new HttpException('Nenhum programa encontrado para a empresa', HttpStatus.NOT_FOUND);
+      }
+
+      console.log(`Criando pastas para todos os programas da empresa ${company.name}.`);
+    } else if (body.programId) {
+      // Buscar o programa específico pelo programId
+      const program = await this.programRepository.findOneBy({ id: body.programId });
+      if (!program) {
+        console.error(`Programa com ID ${body.programId} não encontrado.`);
+        throw new HttpException('Programa não encontrado', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar a empresa associada ao programa
+      company = await this.companyRepository.findOneBy({ id: program.companyId });
+      if (!company) {
+        console.error(`Empresa associada ao programa não encontrada.`);
+        throw new HttpException('Empresa associada ao programa não encontrada', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar todos os programas associados à empresa do programa fornecido
+      programs = await this.programRepository.find({ where: { companyId: company.id } });
+      if (!programs.length) {
+        console.error(`Nenhum programa encontrado para a empresa ${company.id}.`);
+        throw new HttpException('Nenhum programa encontrado para a empresa', HttpStatus.NOT_FOUND);
+      }
+
+      console.log(`Criando pastas para todos os programas da empresa ${company.name} (a partir do programId ${body.programId}).`);
+    } else {
+      // Caso nenhum dos parâmetros tenha sido passado
+      console.error('Nem companyId nem programId foram fornecidos.');
+      throw new HttpException('É necessário fornecer um companyId ou um programId.', HttpStatus.BAD_REQUEST);
+    }
+
+    // Criar as pastas para cada programa da empresa (caso tenha sido passado o companyId ou programId)
     for (const program of programs) {
       const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
       const ldb = `${cnpj}/${program.name}`;
       const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
+
       for (const folder of folders) {
+        console.log(`Criando pasta: ${folder} para o programa: ${program.name}`);
         await this.createFolder(ldb, folder);
       }
     }
 
     return programs;
-    
   }
 
+  // Listar todas as pastas e subpastas com seus arquivos
   async listAllFolders(programId: number) {
     const program = await this.programRepository.findOneBy({
       id: programId,
@@ -175,124 +214,130 @@ export class FilesService {
     const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
 
     const folderPath = `${cnpj}/${program.name}`;
-    // const folderPath = 'ACESSO DIGITAL TECNOLOGIA DA INFORMACAO S.A.';
     const folders = await this.getAllSubfolders(folderPath);
     return folders.subfolders;
   }
 
+  // Obter todas as subpastas e arquivos de um diretório no S3
   async getAllSubfolders(folderName: string): Promise<FolderNode> {
     const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-  
+
     const fetchSubfolders = async (prefix: string): Promise<FolderNode> => {
       const command = new ListObjectsV2Command({
         Bucket: bucketName,
         Prefix: prefix,
         Delimiter: '/',
       });
-  
+
       const response = await this.s3Client.send(command);
       const subfolders =
         response.CommonPrefixes?.map((prefix) => prefix.Prefix) ?? [];
       const subfolderNodes = await Promise.all(subfolders.map(fetchSubfolders));
-  
+
       const regex = /\/([^\/]+)\/?$/;
       const match = prefix.match(regex);
-  
-      // Listar arquivos e incluir ID, nome e URL
-      const files = await this.listFiles(prefix);
-      
+      const files = await this.listFiles(prefix); // Lista os arquivos com ID e URL
+
       return {
-        name: match ? match[1] : null,
+        name: match ? match[1] : 'root', // Nome da pasta
         subfolders: subfolderNodes,
-        files: files, // Agora inclui ID, nome e URL
+        files: files, // Lista os arquivos com ID e URL
       };
     };
-  
+
+    // Garante que sempre seja retornado um folderNode, mesmo se a pasta não tiver subpastas
     return await fetchSubfolders(
       folderName.endsWith('/') ? folderName : `${folderName}/`,
     );
-  }  
+  }
 
+  // Listar arquivos de uma subpasta
   async listFiles(folder: string) {
     const params = {
       Bucket: process.env.AWS_S3_BUCKET_NAME,
       Prefix: folder,
       Delimiter: '/',
     };
-  
+
     try {
       const data = await this.s3.listObjectsV2(params).promise();
-      
-      // Filtrar somente os arquivos que estão na raiz da pasta, sem subpastas
-      const filesInS3 = data.Contents
-        .filter((item) => !item.Key.endsWith('/')) // Filtra apenas os arquivos
-        .map((item) => {
-          const match = item.Key.match(/\/([^\/]+)\/?$/);
-          return {
-            name: match ? match[1] : null,  // Nome do arquivo
-            fullPath: item.Key  // Caminho completo no S3
-          };
-        })
-        .filter(file => file.name && file.fullPath); // Remove valores nulos
-  
-      // Buscar os arquivos no banco de dados que correspondem ao nome e ao caminho completo
-      const filesInDb = await this.filesRepository.find({
-        where: filesInS3.map(file => ({ name: file.name, url: file.fullPath })),
-      });
-  
-      // Combinar as informações de arquivos no S3 e no banco de dados
-      const files = filesInS3.map(fileInS3 => {
-        const fileInDb = filesInDb.find(file => file.url === fileInS3.fullPath);
-  
-        return {
-          id: fileInDb ? fileInDb.id : null,
-          name: fileInS3.name,
-          url: `https://${params.Bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileInS3.fullPath}`
-        };
-      });
-  
+
+      if (!data || !data.Contents) {
+        console.log('Nenhum arquivo encontrado para o prefixo:', folder);
+        return [];
+      }
+
+      // Para cada arquivo, busque no banco de dados e adicione a chave S3 no retorno
+      const files = await Promise.all(
+        data.Contents
+          .filter((item) => !item.Key.endsWith('/'))  // Exclui pastas (chaves que terminam com '/')
+          .map(async (item) => {
+            const key = item.Key;
+            const url = `https://${params.Bucket}.s3.amazonaws.com/${key}`;
+
+            // Busca o arquivo no banco de dados usando a s3Key (chave S3)
+            const fileEntity = await this.filesRepository.findOne({
+              where: { s3Key: key },  // A busca está sendo feita usando a chave S3 salva no banco
+            });
+
+            return {
+              id: fileEntity ? fileEntity.id : null,  // Se o arquivo for encontrado, retorna o ID, caso contrário, null
+              name: key ? key.split('/').pop() : null,  // Nome do arquivo
+              url: url,  // URL completa do arquivo
+              s3Key: key,  // Chave S3 do arquivo
+            };
+          })
+      );
+
       return files;
     } catch (err) {
-      console.error('Erro ao listar os arquivos:', err);
+      console.error('Erro ao listar os arquivos do S3:', err);
       throw err;
     }
   }
-  
 
-  // async checkIfObjectExists(bucket, key) {
-  //   try {
-  //     await this.s3.headObject({ Bucket: bucket, Key: key }).promise();
-  //     console.log('Object exists');
-  //     return true;
-  //   } catch (error) {
-  //     if (error.code === 'NotFound') {
-  //       return false;
-  //     }
-  //     // Handle other errors, e.g., permission issues
-  //     throw error;
-  //   }
-  // }
-  async delete(id: number) {
-    const file = await this.filesRepository.findOne({
-      where: {
-        id: id,
-      },
-    });
-    const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    // const regex = /^https:\/\//i;
+  // Deletar arquivos de uma pasta no S3 e banco de dados
+  async deleteByS3Key(s3Key: string): Promise<any> {
+    let fileDeletedFromDB = false;
+    let fileDeletedFromS3 = false;
+    let messages = [];
 
-    const params = {
-      Bucket: bucketName,
-      Key: file.url,
-    };
+    // Buscar o arquivo no banco de dados
+    const file = await this.filesRepository.findOne({ where: { s3Key } });
 
+    if (file) {
+      // Tentar deletar o arquivo do banco de dados
+      try {
+        await this.filesRepository.remove(file);
+        fileDeletedFromDB = true;
+      } catch (error) {
+        messages.push(`Erro ao deletar arquivo do banco de dados: ${error.message}`);
+      }
+    } else {
+      messages.push(`Arquivo não encontrado no banco de dados para a chave S3: ${s3Key}`);
+    }
+
+    // Tentar deletar o arquivo do S3
     try {
-      await this.s3.deleteObject(params).promise();
-      await this.filesRepository.delete(file.id);
-      console.log(`File deleted successfully from `);
-      return file;
+      const deleteParams = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME, // Usar o nome do bucket a partir da variável de ambiente
+        Key: s3Key,
+      };
+      await this.s3Client.send(new DeleteObjectCommand(deleteParams));
+      fileDeletedFromS3 = true;
     } catch (error) {
-      throw new Error(`Failed to delete file from S3: ${error.message}`);
+      messages.push(`Erro ao deletar arquivo do S3: ${error.message}`);
+    }
+
+    // Montar a resposta final
+    if (fileDeletedFromDB && fileDeletedFromS3) {
+      return { message: `Arquivo deletado com sucesso do S3 e banco de dados: ${s3Key}` };
+    } else if (fileDeletedFromDB) {
+      return { message: `Arquivo deletado do banco de dados, mas não foi encontrado no S3: ${s3Key}`, details: messages };
+    } else if (fileDeletedFromS3) {
+      return { message: `Arquivo deletado do S3, mas não foi encontrado no banco de dados: ${s3Key}`, details: messages };
+    } else {
+      throw new HttpException(`Erro ao deletar arquivo. Detalhes: ${messages.join('. ')}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }

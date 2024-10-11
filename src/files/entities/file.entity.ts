@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
 @Entity("arquivos")
 export class File {
   @PrimaryGeneratedColumn({ name: 'id_arquivo' })
@@ -12,6 +13,9 @@ export class File {
 
   @Column({ name: 'url', type: 'varchar', length: 255, nullable: true })
   url: string;
+
+  @Column({ name: 's3Key', type: 'varchar', length: 255, nullable: true })
+  s3Key: string;
 
   @Column({ name: 'observacao_arquivo', type: 'text', nullable: true })
   observation: string;
@@ -30,5 +34,4 @@ export class File {
 
   @CreateDateColumn({ name: 'criado_em', type: 'timestamp' })
   created_at: Date;
-
 }
