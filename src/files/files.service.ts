@@ -2,11 +2,13 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from './entities/file.entity';
+
 import * as AWS from 'aws-sdk';
 import {
   S3Client,
   PutObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,  // Certifique-se de importar este comando
 } from '@aws-sdk/client-s3';
 import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
@@ -112,21 +114,85 @@ export class FilesService {
         Key: `${ldb}/${folderName}/${subFolder}/`, // Trailing slash para criar a pasta
         Body: '',
       };
-      await this.s3.putObject(params).promise();
+
+      // Log para verificar os parâmetros antes de fazer a chamada ao S3
+      console.log(`Criando pasta: ${params.Key} no bucket: ${params.Bucket}`);
+
+      try {
+        const result = await this.s3.putObject(params).promise();
+
+        // Log para verificar a resposta da operação de criação no S3
+        console.log(`Pasta criada com sucesso: ${params.Key}`, result);
+      } catch (error) {
+        // Log para verificar se houve algum erro ao tentar criar a pasta no S3
+        console.error(`Erro ao criar pasta: ${params.Key}`, error);
+        throw new HttpException(
+          `Erro ao criar pasta no S3: ${error.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
     }
   }
 
   // Criação de múltiplas pastas com subpastas para cada programa
   async createFolders(body: any) {
-    const company = await this.companyRepository.findOneBy({ id: body.companyId });
-    const programs = await this.programRepository.find({ where: { companyId: company.id } });
+    let company: Company;
+    let programs: Program[] = [];
 
+    // Verificar se foi passado o companyId ou programId
+    if (body.companyId) {
+      // Buscar a empresa pelo companyId
+      company = await this.companyRepository.findOneBy({ id: body.companyId });
+      if (!company) {
+        console.error(`Empresa com ID ${body.companyId} não encontrada.`);
+        throw new HttpException('Empresa não encontrada', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar todos os programas associados à empresa
+      programs = await this.programRepository.find({ where: { companyId: company.id } });
+      if (!programs.length) {
+        console.error(`Nenhum programa encontrado para a empresa ${company.id}.`);
+        throw new HttpException('Nenhum programa encontrado para a empresa', HttpStatus.NOT_FOUND);
+      }
+
+      console.log(`Criando pastas para todos os programas da empresa ${company.name}.`);
+    } else if (body.programId) {
+      // Buscar o programa específico pelo programId
+      const program = await this.programRepository.findOneBy({ id: body.programId });
+      if (!program) {
+        console.error(`Programa com ID ${body.programId} não encontrado.`);
+        throw new HttpException('Programa não encontrado', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar a empresa associada ao programa
+      company = await this.companyRepository.findOneBy({ id: program.companyId });
+      if (!company) {
+        console.error(`Empresa associada ao programa não encontrada.`);
+        throw new HttpException('Empresa associada ao programa não encontrada', HttpStatus.NOT_FOUND);
+      }
+
+      // Buscar todos os programas associados à empresa do programa fornecido
+      programs = await this.programRepository.find({ where: { companyId: company.id } });
+      if (!programs.length) {
+        console.error(`Nenhum programa encontrado para a empresa ${company.id}.`);
+        throw new HttpException('Nenhum programa encontrado para a empresa', HttpStatus.NOT_FOUND);
+      }
+
+      console.log(`Criando pastas para todos os programas da empresa ${company.name} (a partir do programId ${body.programId}).`);
+    } else {
+      // Caso nenhum dos parâmetros tenha sido passado
+      console.error('Nem companyId nem programId foram fornecidos.');
+      throw new HttpException('É necessário fornecer um companyId ou um programId.', HttpStatus.BAD_REQUEST);
+    }
+
+    // Criar as pastas para cada programa da empresa (caso tenha sido passado o companyId ou programId)
     for (const program of programs) {
       const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
       const ldb = `${cnpj}/${program.name}`;
       const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
 
       for (const folder of folders) {
+        console.log(`Criando pasta: ${folder} para o programa: ${program.name}`);
         await this.createFolder(ldb, folder);
       }
     }
@@ -230,39 +296,47 @@ export class FilesService {
   }
 
   // Deletar arquivos de uma pasta no S3 e banco de dados
-  async deleteByS3Key(s3Key: string) {
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: s3Key,  // Usando a s3Key diretamente passada como parâmetro
-    };
-  
-    try {
-      // Verificar se o arquivo existe no banco de dados usando a s3Key
-      const fileEntity = await this.filesRepository.findOne({ where: { s3Key } });
-  
-      if (!fileEntity) {
-        // Lançando uma exceção HTTP com uma mensagem amigável
-        console.log(`Arquivo com S3Key ${s3Key} não encontrado no banco de dados.`);
-        throw new HttpException(
-          `Arquivo não encontrado no banco de dados para a chave S3: ${s3Key}`,
-          HttpStatus.NOT_FOUND,
-        );
+  async deleteByS3Key(s3Key: string): Promise<any> {
+    let fileDeletedFromDB = false;
+    let fileDeletedFromS3 = false;
+    let messages = [];
+
+    // Buscar o arquivo no banco de dados
+    const file = await this.filesRepository.findOne({ where: { s3Key } });
+
+    if (file) {
+      // Tentar deletar o arquivo do banco de dados
+      try {
+        await this.filesRepository.remove(file);
+        fileDeletedFromDB = true;
+      } catch (error) {
+        messages.push(`Erro ao deletar arquivo do banco de dados: ${error.message}`);
       }
-  
-      // Deletar o objeto do S3
-      await this.s3.deleteObject(params).promise();
-      console.log(`Arquivo deletado com sucesso: ${s3Key}`);
-  
-      // Deletar o arquivo do banco de dados
-      await this.filesRepository.delete(fileEntity.id);
-  
-      return { message: 'Arquivo deletado com sucesso', s3Key };
-    } catch (error) {
-      console.error('Erro ao deletar arquivo do S3:', error);
-      throw new HttpException(
-        `Erro ao deletar arquivo do S3: ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    } else {
+      messages.push(`Arquivo não encontrado no banco de dados para a chave S3: ${s3Key}`);
     }
-  }  
+
+    // Tentar deletar o arquivo do S3
+    try {
+      const deleteParams = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME, // Usar o nome do bucket a partir da variável de ambiente
+        Key: s3Key,
+      };
+      await this.s3Client.send(new DeleteObjectCommand(deleteParams));
+      fileDeletedFromS3 = true;
+    } catch (error) {
+      messages.push(`Erro ao deletar arquivo do S3: ${error.message}`);
+    }
+
+    // Montar a resposta final
+    if (fileDeletedFromDB && fileDeletedFromS3) {
+      return { message: `Arquivo deletado com sucesso do S3 e banco de dados: ${s3Key}` };
+    } else if (fileDeletedFromDB) {
+      return { message: `Arquivo deletado do banco de dados, mas não foi encontrado no S3: ${s3Key}`, details: messages };
+    } else if (fileDeletedFromS3) {
+      return { message: `Arquivo deletado do S3, mas não foi encontrado no banco de dados: ${s3Key}`, details: messages };
+    } else {
+      throw new HttpException(`Erro ao deletar arquivo. Detalhes: ${messages.join('. ')}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
 }

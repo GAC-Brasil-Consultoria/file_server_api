@@ -113,15 +113,22 @@ export class FilesController {
     }
 
     try {
+      // Chama a função de deleção no serviço
       const result = await this.filesService.deleteByS3Key(s3Key);
+
+      // Retorna a mensagem apropriada
       return {
-        message: 'Arquivo deletado com sucesso',
-        log: [`Deletou arquivo com S3 Key: ${s3Key}`],
+        message: result.message,
+        details: result.details || [],
+        log: [`Tentativa de deletar arquivo com S3 Key: ${s3Key}`],
       };
     } catch (error) {
+      // Log do erro
       console.error(`Erro ao deletar arquivo com S3 Key ${s3Key}:`, error);
+
+      // Lança uma exceção genérica para o frontend
       throw new HttpException(
-        'Erro ao deletar arquivo',
+        `Erro ao deletar arquivo com S3 Key ${s3Key}`,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
