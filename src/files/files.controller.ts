@@ -51,16 +51,16 @@ export class FilesController {
 
     console.log('Arquivos recebidos:', files.map(file => file.originalname)); // Depurador 3: Lista os arquivos recebidos
 
-    // Faz o upload de cada arquivo e aguarda a conclusão
+    // Faz o upload de cada arquivo e coleta os resultados
     const results = await Promise.allSettled(
       files.map((file) =>
         this.filesService.uploadFile(file.originalname, file.buffer, uploadFileDto)
           .then((result) => {
-            console.log(`Upload do arquivo ${file.originalname} concluído com sucesso.`); // Depurador 4: Verifica se o upload foi bem-sucedido
+            console.log(`Upload do arquivo ${file.originalname} concluído com sucesso.`); // Depurador 4
             return result;
           })
           .catch((error) => {
-            console.error(`Erro ao fazer upload do arquivo ${file.originalname}:`, error); // Depurador 5: Exibe erro se o upload falhar
+            console.error(`Erro ao fazer upload do arquivo ${file.originalname}:`, error); // Depurador 5
             throw error;
           }),
       ),
@@ -68,28 +68,23 @@ export class FilesController {
 
     console.log('Resultados do upload:', results); // Depurador 6: Exibe o resultado de todos os uploads
 
-    // Verifica se houve sucesso em algum dos uploads
-    const fulfilledResult = results.find(result => result.status === 'fulfilled') as PromiseFulfilledResult<{ message: string; program: Program }>;
+    // Filtra os arquivos que foram enviados com sucesso
+    const fulfilledResults = results
+      .filter(result => result.status === 'fulfilled')
+      .map(result => (result as PromiseFulfilledResult<{ name: string; url: string; s3Key: string }>).value);
 
-    if (!fulfilledResult) {
-      console.error('Nenhum upload foi bem-sucedido.'); // Depurador 7: Verifica se nenhum upload teve sucesso
+    if (fulfilledResults.length === 0) {
+      console.error('Nenhum upload foi bem-sucedido.'); // Depurador 7
       throw new HttpException('Erro ao enviar arquivos', HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    const targetProgram = fulfilledResult.value.program;
-
-    console.log('Arquivos enviados com sucesso para o programa:', targetProgram.name); // Depurador 8: Confirma o programa alvo dos uploads
+    console.log('Arquivos enviados com sucesso:', fulfilledResults); // Depurador 8: Confirma os arquivos enviados
 
     return {
       message: 'Arquivos enviados com sucesso',
-      log: [
-        `Arquivos enviados para o programa: ${targetProgram.name} <br> - ${files
-          .map((f) => f.originalname)
-          .join('<br>- ')}`,
-      ],
+      files: fulfilledResults, // Retorna a lista de arquivos na estrutura esperada
     };
   }
-
 
   // Criação de pastas com base no DTO
   @Post('create-folders')

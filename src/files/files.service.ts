@@ -66,9 +66,9 @@ export class FilesService {
     if (!company) throw new Error('Empresa não encontrada');
 
     // 2. Gerar o caminho da chave S3 (s3Key)
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
+    const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove os caracteres especiais do CNPJ
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
-    const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`;
+    const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`; // Chave S3
 
     // 3. Fazer o upload do arquivo para o S3
     await this.s3Client.send(
@@ -79,7 +79,7 @@ export class FilesService {
       }),
     );
 
-    // 4. Gerar a URL pública ou assinada
+    // 4. Gerar a URL pública do arquivo no S3
     const fileUrl = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
 
     // 5. Salvar informações no banco de dados, incluindo a chave S3 e a URL
@@ -95,7 +95,8 @@ export class FilesService {
 
     await this.filesRepository.save(newFile);
 
-    return { message: 'Arquivo enviado com sucesso', program };
+    // 6. Retornar as informações do arquivo na estrutura desejada
+    return { name: fileName, url: fileUrl, s3Key: s3Key };
   }
 
   // Criação de pastas específicas com subpastas
