@@ -43,31 +43,24 @@ export class FilesController {
     @UploadedFiles(new FileNotEmptyValidator()) files: Array<Express.Multer.File>,
     @Body() uploadFileDto: UploadFileDto,
   ) {
-    console.log('Iniciando o upload de arquivos...'); // Depurador 1: Verifica se a função está sendo chamada
 
     if (!files || files.length === 0) {
       console.log('Nenhum arquivo foi enviado.'); // Depurador 2: Verifica se há arquivos
       throw new HttpException('Nenhum arquivo foi enviado', HttpStatus.BAD_REQUEST);
     }
 
-    console.log('Arquivos recebidos:', files.map(file => file.originalname)); // Depurador 3: Lista os arquivos recebidos
-
     // Faz o upload de cada arquivo e coleta os resultados
     const results = await Promise.allSettled(
       files.map((file) =>
         this.filesService.uploadFile(file.originalname, file.buffer, uploadFileDto)
           .then((result) => {
-            console.log(`Upload do arquivo ${file.originalname} concluído com sucesso.`); // Depurador 4
             return result;
           })
           .catch((error) => {
-            console.error(`Erro ao fazer upload do arquivo ${file.originalname}:`, error); // Depurador 5
             throw error;
           }),
       ),
     );
-
-    console.log('Resultados do upload:', results); // Depurador 6: Exibe o resultado de todos os uploads
 
     // Filtra os arquivos que foram enviados com sucesso
     const fulfilledResults = results
@@ -75,11 +68,8 @@ export class FilesController {
       .map(result => (result as PromiseFulfilledResult<{ name: string; url: string; s3Key: string }>).value);
 
     if (fulfilledResults.length === 0) {
-      console.error('Nenhum upload foi bem-sucedido.'); // Depurador 7
       throw new HttpException('Erro ao enviar arquivos', HttpStatus.INTERNAL_SERVER_ERROR);
     }
-
-    console.log('Arquivos enviados com sucesso:', fulfilledResults); // Depurador 8: Confirma os arquivos enviados
 
     return {
       message: 'Arquivos enviados com sucesso',
