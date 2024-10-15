@@ -2,6 +2,8 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from './entities/file.entity';
+import { Folder } from './entities/folder.entity';
+import { FileType } from './entities/file-type.entity';
 
 import * as AWS from 'aws-sdk';
 import {
@@ -32,6 +34,10 @@ export class FilesService {
     private companyRepository: Repository<Company>,
     @InjectRepository(Program)
     private programRepository: Repository<Program>,
+    @InjectRepository(Folder)
+    private readonly folderRepository: Repository<Folder>,
+    @InjectRepository(FileType)
+    private readonly fileTypeRepository: Repository<FileType>,
   ) {
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -339,5 +345,21 @@ export class FilesService {
     } else {
       throw new HttpException(`Erro ao deletar arquivo. Detalhes: ${messages.join('. ')}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  // Função para buscar os tipos de arquivos para uma pasta com base no nome da pasta
+  async getFileTypesByFolderName(folderName: string): Promise<FileType[]> {
+    // Buscar a pasta pelo nome
+    const folder = await this.folderRepository.findOne({
+      where: { name: folderName },
+      relations: ['fileTypes'],  // Carrega os tipos de arquivos relacionados
+    });
+
+    if (!folder) {
+      throw new Error(`Folder with name '${folderName}' not found`);
+    }
+
+    // Retorna os tipos de arquivos relacionados à pasta
+    return folder.fileTypes;
   }
 }

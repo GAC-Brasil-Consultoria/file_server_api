@@ -7,6 +7,9 @@ import { File } from './files/entities/file.entity';
 import { FilesModule } from './files/files.module';
 import { Company } from './files/entities/company.entity';
 import { Program } from './files/entities/program.entity';
+import { Folder } from './files/entities/folder.entity';        // Nova entidade Folder
+import { FileType } from './files/entities/file-type.entity';   // Nova entidade FileType
+import { FolderGroup } from './files/entities/folder-group.entity'; // Nova entidade FolderGroup
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
@@ -23,7 +26,14 @@ import { ConfigModule } from '@nestjs/config';
       username: process.env.MYSQL_USER,
       password: process.env.MYSQL_PASS,
       database: process.env.MYSQL_DATABASE,
-      entities: [File, Company, Program],
+      entities: [
+        File, 
+        Company, 
+        Program, 
+        Folder,         // Adiciona Folder à lista de entidades
+        FileType,       // Adiciona FileType à lista de entidades
+        FolderGroup     // Adiciona FolderGroup à lista de entidades
+      ],
       synchronize: false,
     }),
   ],

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesService } from './files.service';
+import { FileType } from './entities/file-type.entity';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
@@ -151,4 +152,11 @@ export class FilesController {
       );
     }
   }
+
+  // Rota para buscar os tipos de arquivos por nome da pasta
+  @Get('file-types/:folderName')
+  async getFileTypesByFolder(@Param('folderName') folderName: string): Promise < FileType[] > {
+    return this.filesService.getFileTypesByFolderName(folderName);
+  }
+
 }
