@@ -1,7 +1,9 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { File } from './entities/file.entity';
+import { Folder } from './entities/folder.entity';
+import { FileType } from './entities/file-type.entity';
 
 import * as AWS from 'aws-sdk';
 import {
@@ -24,6 +26,7 @@ export interface FolderNode {
 export class FilesService {
   private s3: AWS.S3;
   private s3Client: S3Client;
+  private readonly logger = new Logger(FilesService.name); // Usando logger NestJS
 
   constructor(
     @InjectRepository(File)
@@ -32,6 +35,10 @@ export class FilesService {
     private companyRepository: Repository<Company>,
     @InjectRepository(Program)
     private programRepository: Repository<Program>,
+    @InjectRepository(Folder)
+    private readonly folderRepository: Repository<Folder>,
+    @InjectRepository(FileType)
+    private readonly fileTypeRepository: Repository<FileType>,
   ) {
     this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -53,34 +60,52 @@ export class FilesService {
     fileName: string,
     file: Buffer,
     uploadFileDto: UploadFileDto,
-  ) {
+  ): Promise<{ name: string; url: string; s3Key: string }> {
+    this.logger.log(`Iniciando o upload do arquivo: ${fileName}`); // Log inicial
+
     // 1. Buscar informações do programa e da empresa
     const program = await this.programRepository.findOne({
       where: { id: uploadFileDto.programId },
     });
-    if (!program) throw new Error('Programa não encontrado');
+    if (!program) {
+      // this.logger.error('Programa não encontrado'); // Log de erro
+      throw new Error('Programa não encontrado');
+    }
 
     const company = await this.companyRepository.findOne({
       where: { id: program.companyId },
     });
-    if (!company) throw new Error('Empresa não encontrada');
+    if (!company) {
+      // this.logger.error('Empresa não encontrada'); // Log de erro
+      throw new Error('Empresa não encontrada');
+    }
 
     // 2. Gerar o caminho da chave S3 (s3Key)
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove os caracteres especiais do CNPJ
+    const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove caracteres especiais do CNPJ
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
     const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`; // Chave S3
 
+    // this.logger.log(`Gerando chave S3: ${s3Key}`); // Log da chave gerada
+
     // 3. Fazer o upload do arquivo para o S3
-    await this.s3Client.send(
-      new PutObjectCommand({
-        Bucket: bucketName,
-        Key: s3Key,
-        Body: file,
-      }),
-    );
+    try {
+      // this.logger.log(`Fazendo upload para o bucket: ${bucketName}`); // Log do upload
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: s3Key,
+          Body: file,
+        }),
+      );
+      // this.logger.log(`Upload para S3 concluído: ${s3Key}`); // Log após sucesso no upload
+    } catch (error) {
+      // this.logger.error(`Erro ao fazer upload para S3: ${error.message}`); // Log de erro
+      throw new Error(`Erro ao fazer upload para S3: ${error.message}`);
+    }
 
     // 4. Gerar a URL pública do arquivo no S3
     const fileUrl = `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+    // this.logger.log(`URL gerada: ${fileUrl}`); // Log da URL gerada
 
     // 5. Salvar informações no banco de dados, incluindo a chave S3 e a URL
     const newFile = this.filesRepository.create({
@@ -93,7 +118,14 @@ export class FilesService {
       file_logo_id: 1,  // Ajuste conforme necessário
     });
 
-    await this.filesRepository.save(newFile);
+    try {
+      // this.logger.log(`Salvando informações do arquivo no banco de dados: ${fileName}`); // Log antes de salvar
+      await this.filesRepository.save(newFile);
+      // this.logger.log(`Arquivo salvo no banco de dados: ${fileName}`); // Log após sucesso no salvamento
+    } catch (error) {
+      // this.logger.error(`Erro ao salvar arquivo no banco de dados: ${error.message}`); // Log de erro
+      throw new Error(`Erro ao salvar arquivo no banco de dados: ${error.message}`);
+    }
 
     // 6. Retornar as informações do arquivo na estrutura desejada
     return { name: fileName, url: fileUrl, s3Key: s3Key };
@@ -339,5 +371,21 @@ export class FilesService {
     } else {
       throw new HttpException(`Erro ao deletar arquivo. Detalhes: ${messages.join('. ')}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  // Função para buscar os tipos de arquivos para uma pasta com base no nome da pasta
+  async getFileTypesByFolderName(folderName: string): Promise<FileType[]> {
+    // Buscar a pasta pelo nome
+    const folder = await this.folderRepository.findOne({
+      where: { name: folderName },
+      relations: ['fileTypes'],  // Carrega os tipos de arquivos relacionados
+    });
+
+    if (!folder) {
+      throw new Error(`Folder with name '${folderName}' not found`);
+    }
+
+    // Retorna os tipos de arquivos relacionados à pasta
+    return folder.fileTypes;
   }
 }
