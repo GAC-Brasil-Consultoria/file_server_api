@@ -153,10 +153,15 @@ export class FilesController {
     }
   }
 
-  // Rota para buscar os tipos de arquivos por nome da pasta
   @Get('file-types/:folderName')
-  async getFileTypesByFolder(@Param('folderName') folderName: string): Promise < FileType[] > {
-    return this.filesService.getFileTypesByFolderName(folderName);
-  }
+  async getFileTypesByFolder(@Param('folderName') folderName: string): Promise<{ id: number; name: string; description: string }[]> {
+    const fileTypes = await this.filesService.getFileTypesByFolderName(folderName);
 
+    // Filtra e retorna apenas id, name e description
+    return fileTypes.map(fileType => ({
+      id: fileType.id,
+      name: fileType.name,
+      description: fileType.description,
+    }));
+  }
 }
