@@ -1,25 +1,20 @@
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import 'dotenv/config';
-import { ResponseInterceptor } from './response.interceptor';
+import 'dotenv/config'
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+// console.log(process.env.MYSQL_HOST);
+// console.log(process.env.MYSQL_USER);
 
+
+// console.log(process.env.MYSQL_DATABASE);
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
-
-  const config = new DocumentBuilder()
-    .setTitle('Cats example')
-    .setDescription('The cats API description')
-    .setVersion('1.0')
-    .addTag('cats')
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document); 
-  
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
-  await app.listen(process.env.PORT || 3000);
+  await app.listen(process.env.PORT);
+  console.log(`Application is running on: ${await app.getUrl()}`);
+  
 }
 bootstrap();
+ 

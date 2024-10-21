@@ -1,35 +1,54 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
-import { File } from './file.entity';
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+    UpdateDateColumn,
+    DeleteDateColumn,
+    ManyToOne,
+    JoinColumn,
+} from 'typeorm';
+import { Folder } from './folder.entity';  // Assumindo que você já tem a entidade Folder
 
-@Entity('arquivos_tipo')
+@Entity('arquivos_tipos')
 export class FileType {
-  @PrimaryGeneratedColumn({ type: 'int', unsigned: true , name:"id_arquivo_tipo" })
-  id: number;
+    @PrimaryGeneratedColumn({ name: 'id_arquivo_tipo', type: 'int', unsigned: true })
+    id: number;
 
-  @Column({ type: 'int', default: 0 , name:"documento_tipo_id"})
-  doc_type_id: number;
+    @ManyToOne(() => Folder, (folder) => folder.fileTypes, { onDelete: 'CASCADE', onUpdate: 'CASCADE' })
+    @JoinColumn({ name: 'pasta_id' })
+    folder: Folder;
 
-  @Column({ type: 'varchar', length: 100, default: '0', name:"arquivo_tipo_nome"})
-  name: string;
-  
-  @Column({ type: 'varchar', length: 50, default: '0' , name:"arquivo_tipo_sigla" })
-  abbreviation: string;
+    @Column({ name: 'nome_arquivo_tipo', type: 'varchar', length: 100 })
+    name: string;
 
-  @Column({ type: 'varchar', length: 50, default: '0' , name:"arquivo_tipo_cor" })
-  color: string;
+    @Column({ name: 'sigla_arquivo_tipo', type: 'varchar', length: 50 })
+    abbreviation: string;
 
-  @Column({ type: 'varchar', length: 100, default: '0' , name:"caminho" })
-  path: string;
+    @Column({ name: 'cor_arquivo_tipo', type: 'varchar', length: 50 })
+    color: string;
 
-  @Column({ type: 'datetime', nullable: true , name:"" })
-  created_at: Date;
+    @Column({ name: 'tamanho_maximo_mb', type: 'int', nullable: true, default: 5 })
+    max_size_mb: number;
 
-  @Column({ type: 'datetime', nullable: true , name:"" })
-  updated_at: Date;
+    @Column({ name: 'descricao_arquivo', type: 'mediumtext', nullable: true })
+    description: string;
 
-  @Column({ type: 'datetime', nullable: true , name:"" })
-  deleted_at: Date;
+    @Column({ name: 'formato_permitido', type: 'varchar', length: 50 })
+    allowed_format: string;
 
-  @OneToMany(() => File, arquivo => arquivo.file_type)
-  files: File[];
+    @Column({ name: 'requer_validacao', type: 'tinyint', default: 0 })
+    requires_validation: boolean;
+
+    @Column({ name: 'prazo_upload_dias', type: 'int', nullable: true })
+    upload_deadline_days: number;
+
+    @CreateDateColumn({ name: 'created_at', type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+    created_at: Date;
+
+    @UpdateDateColumn({ name: 'updated_at', type: 'datetime', default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+    updated_at: Date;
+
+    @DeleteDateColumn({ name: 'deleted_at', type: 'datetime', nullable: true })
+    deleted_at: Date;
 }

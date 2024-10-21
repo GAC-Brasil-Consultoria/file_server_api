@@ -1,14 +1,23 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
 
 export class UploadFileDto {
-  @ApiProperty({ example: 1 })
   @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
   programId: number;
-  @ApiProperty({ example: 1 })
+
   @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
   userId: number;
-  @ApiProperty({ example: 1 })
+
   @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
   fileTypeId: number;
+
+  @IsNotEmpty()
+  @IsString()
+  folderTree: string;
 }
