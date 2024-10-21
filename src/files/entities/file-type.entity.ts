@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { Folder } from './folder.entity';  // Assumindo que você já tem a entidade Folder
 
-@Entity('arquivos_tipos')
+@Entity('arquivos_tipo')
 export class FileType {
     @PrimaryGeneratedColumn({ name: 'id_arquivo_tipo', type: 'int', unsigned: true })
     id: number;
@@ -19,13 +19,13 @@ export class FileType {
     @JoinColumn({ name: 'pasta_id' })
     folder: Folder;
 
-    @Column({ name: 'nome_arquivo_tipo', type: 'varchar', length: 100 })
+    @Column({ name: 'arquivo_tipo_nome', type: 'varchar', length: 100 })
     name: string;
 
-    @Column({ name: 'sigla_arquivo_tipo', type: 'varchar', length: 50 })
+    @Column({ name: 'arquivo_tipo_sigla', type: 'varchar', length: 50 })
     abbreviation: string;
 
-    @Column({ name: 'cor_arquivo_tipo', type: 'varchar', length: 50 })
+    @Column({ name: 'arquivo_tipo_cor', type: 'varchar', length: 50 })
     color: string;
 
     @Column({ name: 'tamanho_maximo_mb', type: 'int', nullable: true, default: 5 })

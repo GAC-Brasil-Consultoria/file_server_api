@@ -11,7 +11,4 @@ export class FileLogo {
 
   @Column({name:"arquivo_logo_caminho"})
   path: string;
-
-  @OneToMany(() => File, arquivo => arquivo.file_logo)
-  files: File[]; 
 }
