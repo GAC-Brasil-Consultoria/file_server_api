@@ -234,22 +234,23 @@ export class FilesService {
     return programs;
   }
 
-  // Listar todas as pastas e subpastas com seus arquivos
   async listAllFolders(programId: number) {
     const program = await this.programRepository.findOneBy({
       id: programId,
     });
-
+  
     const company = await this.companyRepository.findOneBy({
       id: program.companyId,
     });
-
-    const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
-
-    const folderPath = `${cnpj}/${program.name}`;
+  
+    const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove pontuação do CNPJ
+    const sanitizedProgramName = String(program.name).replace(/\//g, ''); // Garante que program.name seja string e remove qualquer barra '/'
+    
+    const folderPath = `${cnpj}/${sanitizedProgramName}`; // Concatena CNPJ e nome do programa
     const folders = await this.getAllSubfolders(folderPath);
+  
     return folders.subfolders;
-  }
+  } 
 
   // Obter todas as subpastas e arquivos de um diretório no S3
   async getAllSubfolders(folderName: string): Promise<FolderNode> {
