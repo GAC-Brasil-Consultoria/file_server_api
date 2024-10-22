@@ -220,16 +220,17 @@ export class FilesService {
 
     // Criar as pastas para cada programa da empresa (caso tenha sido passado o companyId ou programId)
     for (const program of programs) {
-      const cnpj = company.cnpj.replace(/[.\-\/]/g, '');
-      const ldb = `${cnpj}/${program.name}`;
+      const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove pontuação do CNPJ
+      const sanitizedProgramName = String(program.name).replace(/\//g, ''); // Garante que program.name seja string e remove qualquer barra '/'
+      const ldb = `${cnpj}/${sanitizedProgramName}`; // Concatena CNPJ e nome do programa
       const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
-
+    
       for (const folder of folders) {
-        console.log(`Criando pasta: ${folder} para o programa: ${program.name}`);
+        console.log(`Criando pasta: ${folder} para o programa: ${sanitizedProgramName}`);
         await this.createFolder(ldb, folder);
       }
     }
-
+    
     return programs;
   }
 
