@@ -67,5 +67,7 @@ export class UsersService {
     return user.groups.some((group) => requiredPermissions.includes(group.id));
   }
 
-
+  isCustomer(user: UserDto): boolean {
+    return user.groups.some((group) => group.id >= 20 && group.id < 30);
+  }
 }
