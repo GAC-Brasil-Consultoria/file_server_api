@@ -11,6 +11,8 @@ import { Folder } from './files/entities/folder.entity';        // Nova entidade
 import { FileType } from './files/entities/file-type.entity';   // Nova entidade FileType
 import { FolderGroup } from './files/entities/folder-group.entity'; // Nova entidade FolderGroup
 import { ConfigModule } from '@nestjs/config';
+import { User } from './users/entities.ts/user.entity';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { ConfigModule } from '@nestjs/config';
       password: process.env.MYSQL_PASS,
       database: process.env.MYSQL_DATABASE,
       entities: [
+        User,
         File, 
         Company, 
         Program, 
@@ -36,6 +39,7 @@ import { ConfigModule } from '@nestjs/config';
       ],
       synchronize: false,
     }),
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
