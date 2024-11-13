@@ -23,9 +23,7 @@ import { Program } from './entities/program.entity';
 export class FilesController {
   private s3Client: S3Client;
 
-  constructor(
-    private readonly filesService: FilesService,
-  ) {
+  constructor(private readonly filesService: FilesService) {
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
       credentials: {
@@ -40,19 +38,23 @@ export class FilesController {
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(FilesInterceptor('files'))
   async uploadFiles(
-    @UploadedFiles(new FileNotEmptyValidator()) files: Array<Express.Multer.File>,
+    @UploadedFiles(new FileNotEmptyValidator())
+    files: Array<Express.Multer.File>,
     @Body() uploadFileDto: UploadFileDto,
   ) {
-
     if (!files || files.length === 0) {
       console.log('Nenhum arquivo foi enviado.'); // Depurador 2: Verifica se há arquivos
-      throw new HttpException('Nenhum arquivo foi enviado', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Nenhum arquivo foi enviado',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Faz o upload de cada arquivo e coleta os resultados
     const results = await Promise.allSettled(
       files.map((file) =>
-        this.filesService.uploadFile(file.originalname, file.buffer, uploadFileDto)
+        this.filesService
+          .uploadFile(file.originalname, file.buffer, uploadFileDto)
           .then((result) => {
             return result;
           })
@@ -64,11 +66,23 @@ export class FilesController {
 
     // Filtra os arquivos que foram enviados com sucesso
     const fulfilledResults = results
-      .filter(result => result.status === 'fulfilled')
-      .map(result => (result as PromiseFulfilledResult<{ name: string; url: string; s3Key: string }>).value);
+      .filter((result) => result.status === 'fulfilled')
+      .map(
+        (result) =>
+          (
+            result as PromiseFulfilledResult<{
+              name: string;
+              url: string;
+              s3Key: string;
+            }>
+          ).value,
+      );
 
     if (fulfilledResults.length === 0) {
-      throw new HttpException('Erro ao enviar arquivos', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Erro ao enviar arquivos',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     return {
@@ -94,17 +108,20 @@ export class FilesController {
   }
 
   // Lista todas as pastas e arquivos por programa
-  @Get('foldersAndFilesByProgram/:id')
-  async foldersAndFilesByProgram(@Param('id') id: number) {
+  @Post('foldersAndFilesByProgram')
+  async foldersAndFilesByProgram(
+    @Body('programId') programId: number,
+    @Body('userId') userId: number,
+  ) {
     try {
-      const data = await this.filesService.listAllFolders(id);
+      const data = await this.filesService.listAllFolders(programId, userId);
       return {
         message: 'Pastas e arquivos carregados com sucesso',
         data,
       };
     } catch (error) {
       console.error(
-        `Erro ao carregar pastas e arquivos para o programa ${id}:`,
+        `Erro ao carregar pastas e arquivos para o programa ${programId} e usuário ${userId}:`,
         error,
       );
       throw new HttpException(
@@ -118,7 +135,10 @@ export class FilesController {
   @Delete()
   async deleteFile(@Body('s3Key') s3Key: string) {
     if (!s3Key) {
-      throw new HttpException('Chave S3 (s3Key) é obrigatória', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'Chave S3 (s3Key) é obrigatória',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     try {
@@ -144,11 +164,14 @@ export class FilesController {
   }
 
   @Get('file-types/:folderName')
-  async getFileTypesByFolder(@Param('folderName') folderName: string): Promise<{ id: number; name: string; description: string }[]> {
-    const fileTypes = await this.filesService.getFileTypesByFolderName(folderName);
+  async getFileTypesByFolder(
+    @Param('folderName') folderName: string,
+  ): Promise<{ id: number; name: string; description: string }[]> {
+    const fileTypes =
+      await this.filesService.getFileTypesByFolderName(folderName);
 
     // Filtra e retorna apenas id, name e description
-    return fileTypes.map(fileType => ({
+    return fileTypes.map((fileType) => ({
       id: fileType.id,
       name: fileType.name,
       description: fileType.description,
