@@ -162,19 +162,24 @@ export class FilesService {
   async createFolder(ldb: string, folderName: string = null) {
     const folderMap = {
       CONTÁBIL: [
-        'Controles internos',
+        //'Controles internos',
         'Notas Fiscais',
-        'RH',
         'Timesheet',
-        'Valoração',
+        //'Valoração',
       ],
       TÉCNICO: [
-        'Anexo FORMP&D',
-        'Arquivado',
+        //'Anexo FORMP&D',
+        //'Arquivado',
         'Documentação Técnica',
-        'Imagens',
+        //'Imagens',
       ],
-      ENTREGÁVEL: ['Dossiê', 'FORMP&D', 'Parecer MCTI', 'Relatório Gerencial'],
+      ENTREGÁVEL: [
+        'Dossiê', 
+        //'FORMP&D', 
+        // 'Parecer MCTI', 
+        // 'Relatório Gerencial'
+        ],
+      RH: ['Folha']
     };
 
     const subFolders = folderMap[folderName] || [];
@@ -187,16 +192,16 @@ export class FilesService {
       };
 
       // Log para verificar os parâmetros antes de fazer a chamada ao S3
-      console.log(`Criando pasta: ${params.Key} no bucket: ${params.Bucket}`);
+      //console.log(`Criando pasta: ${params.Key} no bucket: ${params.Bucket}`);
 
       try {
         const result = await this.s3.putObject(params).promise();
 
         // Log para verificar a resposta da operação de criação no S3
-        console.log(`Pasta criada com sucesso: ${params.Key}`, result);
+        //console.log(`Pasta criada com sucesso: ${params.Key}`, result);
       } catch (error) {
         // Log para verificar se houve algum erro ao tentar criar a pasta no S3
-        console.error(`Erro ao criar pasta: ${params.Key}`, error);
+        //console.error(`Erro ao criar pasta: ${params.Key}`, error);
         throw new HttpException(
           `Erro ao criar pasta no S3: ${error.message}`,
           HttpStatus.INTERNAL_SERVER_ERROR,
@@ -292,7 +297,7 @@ export class FilesService {
       const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove pontuação do CNPJ
       const sanitizedProgramName = String(program.name).replace(/\//g, ''); // Garante que program.name seja string e remove qualquer barra '/'
       const ldb = `${cnpj}/${sanitizedProgramName}`; // Concatena CNPJ e nome do programa
-      const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO'];
+      const folders = ['CONTÁBIL', 'ENTREGÁVEL', 'TÉCNICO', 'RH'];
 
       for (const folder of folders) {
         console.log(
