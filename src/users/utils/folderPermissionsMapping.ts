@@ -15,7 +15,7 @@ export const folderPermissionsMapping = {
       read: [20, 23],  // Cliente - All e Cliente - Técnico
       write: [20, 23]
   },
-  'RH': {
+  'Folha': {
       read: [22],  //Cliente - RH
       write: [22]
   },
