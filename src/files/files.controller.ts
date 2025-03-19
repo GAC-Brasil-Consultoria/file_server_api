@@ -57,29 +57,18 @@ export class FilesController {
         HttpStatus.BAD_REQUEST,
       );
     }
-
-    // Validação de permissão: Verifica se o usuário pode escrever na pasta informada
-    const user = await this.usersService.getUserWithPermissions(
-      uploadFileDto.userId,
-    );
-    const folder = uploadFileDto.folderTree.at(-1);
-    if (this.usersService.isCustomer(user)) {
-      const hasWritePermission = this.usersService.hasFolderPermission(
-        user,
-        folder,
-        'write',
+    
+    const canUpload = await this.filesService.canUpload(uploadFileDto);
+    if (!canUpload) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'Você não tem permissão para escrever nesta pasta',
+          data: null,
+          errors: [],
+        },
+        HttpStatus.FORBIDDEN,
       );
-      if (!hasWritePermission) {
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.FORBIDDEN,
-            message: 'Você não tem permissão para escrever nesta pasta',
-            data: null,
-            errors: [],
-          },
-          HttpStatus.FORBIDDEN,
-        );
-      }
     }
 
     // Processa os uploads de forma paralela
