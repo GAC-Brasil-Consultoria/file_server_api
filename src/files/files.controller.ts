@@ -12,18 +12,20 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesService } from './files.service';
-import { FileType } from './entities/file-type.entity';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { FileNotEmptyValidator } from 'src/validators/file-not-empty.validator';
-import { Program } from './entities/program.entity';
+import { UsersService } from '../users/users.service';
 
 @Controller('file')
 export class FilesController {
   private s3Client: S3Client;
 
-  constructor(private readonly filesService: FilesService) {
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly usersService: UsersService,
+  ) {
     this.s3Client = new S3Client({
       region: process.env.AWS_REGION, // Exemplo: 'us-east-1'
       credentials: {
@@ -35,37 +37,53 @@ export class FilesController {
 
   // Upload de arquivos para o AWS S3 com validação via DTO
   @Post()
-  @HttpCode(HttpStatus.CREATED)
+  @HttpCode(HttpStatus.OK) // ou 200
   @UseInterceptors(FilesInterceptor('files'))
   async uploadFiles(
     @UploadedFiles(new FileNotEmptyValidator())
     files: Array<Express.Multer.File>,
     @Body() uploadFileDto: UploadFileDto,
   ) {
+    // Validação: se nenhum arquivo foi enviado
     if (!files || files.length === 0) {
-      console.log('Nenhum arquivo foi enviado.'); // Depurador 2: Verifica se há arquivos
+      //this.logger.error('Nenhum arquivo foi enviado.');
       throw new HttpException(
-        'Nenhum arquivo foi enviado',
+        {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'Nenhum arquivo foi enviado',
+          data: null,
+          errors: [],
+        },
         HttpStatus.BAD_REQUEST,
       );
     }
+    
+    const canUpload = await this.filesService.canUpload(uploadFileDto);
+    if (!canUpload) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'Você não tem permissão para escrever nesta pasta',
+          data: null,
+          errors: [],
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
 
-    // Faz o upload de cada arquivo e coleta os resultados
+    // Processa os uploads de forma paralela
     const results = await Promise.allSettled(
       files.map((file) =>
-        this.filesService
-          .uploadFile(file.originalname, file.buffer, uploadFileDto)
-          .then((result) => {
-            return result;
-          })
-          .catch((error) => {
-            throw error;
-          }),
+        this.filesService.uploadFile(
+          file.originalname,
+          file.buffer,
+          uploadFileDto,
+        ),
       ),
     );
 
-    // Filtra os arquivos que foram enviados com sucesso
-    const fulfilledResults = results
+    // Filtra os uploads bem-sucedidos
+    const successfulUploads = results
       .filter((result) => result.status === 'fulfilled')
       .map(
         (result) =>
@@ -78,16 +96,36 @@ export class FilesController {
           ).value,
       );
 
-    if (fulfilledResults.length === 0) {
-      throw new HttpException(
-        'Erro ao enviar arquivos',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+    // Compila os erros dos uploads que falharam
+    const failedUploads = results
+      .filter((result) => result.status === 'rejected')
+      .map((result) => {
+        const error = (result as PromiseRejectedResult).reason;
+        const status =
+          error instanceof HttpException
+            ? error.getStatus()
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        return {
+          message: error.message,
+          status,
+        };
+      });
 
+    // Define o statusCode da resposta com base no cenário:
+    // Se todos os uploads falharam, retorna status de erro; se pelo menos um for bem-sucedido, retorna 200.
+    const statusCode =
+      successfulUploads.length === 0
+        ? HttpStatus.INTERNAL_SERVER_ERROR
+        : HttpStatus.OK;
+
+    // Retorna uma resposta padronizada com os dados e os erros
     return {
-      message: 'Arquivos enviados com sucesso',
-      files: fulfilledResults, // Retorna a lista de arquivos na estrutura esperada
+      statusCode,
+      message: 'Processamento concluído',
+      data: {
+        files: successfulUploads,
+      },
+      errors: failedUploads,
     };
   }
 
