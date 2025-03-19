@@ -41,7 +41,7 @@ export class UsersService {
         groupDto.description = groupData.description;
 
         // Excluímos as permissões individuais e mantemos apenas o ID do grupo
-        groupDto.permissions = []; // Opcional: pode omitir se `permissions` não for necessário
+        //groupDto.permissions = []; // Opcional: pode omitir se `permissions` não for necessário
 
         return groupDto;
       });
