@@ -16,6 +16,7 @@ import { Company } from './entities/company.entity';
 import { Program } from './entities/program.entity';
 import { UploadFileDto } from './dto/upload-file.dto';
 import { UsersService } from '../users/users.service';
+import { UserDto } from '../users/dto/user.dto';
 
 export interface FolderNode {
   name: string;
@@ -87,27 +88,6 @@ export class FilesService {
     const cnpj = company.cnpj.replace(/[.\-\/]/g, ''); // Remove caracteres especiais do CNPJ
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
     const s3Key = `${cnpj}/${program.name}/${uploadFileDto.folderTree}/${fileName}`; // Chave S3
-
-    const folder = uploadFileDto.folderTree.at(-1);
-
-    const user = await this.usersService.getUserWithPermissions(uploadFileDto.userId);
-
-    if(this.usersService.isCustomer(user)) {
-
-      const hasWritePermission = this.usersService.hasFolderPermission(
-        user,
-        folder,
-        'write'
-      );
-  
-      if (!hasWritePermission) {
-        throw new HttpException(
-          'Você não tem permissão para escrever nesta pasta',
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-    }
 
 
     // this.logger.log(`Gerando chave S3: ${s3Key}`); // Log da chave gerada
@@ -499,5 +479,26 @@ export class FilesService {
 
     // Retorna os tipos de arquivos relacionados à pasta
     return folder.fileTypes;
+  }
+
+  async canUpload(uploadFileDto: UploadFileDto) {
+    const folder = uploadFileDto.folderTree.at(-1);
+
+    const user = await this.usersService.getUserWithPermissions(uploadFileDto.userId);
+    if(this.usersService.isCustomer(user)) {
+
+      const hasWritePermission = this.usersService.hasFolderPermission(
+        user,
+        folder,
+        'write'
+      );
+  
+      if (!hasWritePermission) {
+        return false;
+      }
+
+    }
+
+    return true;
   }
 }
