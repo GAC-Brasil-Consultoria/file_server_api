@@ -482,7 +482,7 @@ export class FilesService {
   }
 
   async canUpload(uploadFileDto: UploadFileDto) {
-    const folder = uploadFileDto.folderTree.at(-1);
+    const folder = uploadFileDto.folderTree.split('/').pop();
 
     const user = await this.usersService.getUserWithPermissions(uploadFileDto.userId);
     if(this.usersService.isCustomer(user)) {
